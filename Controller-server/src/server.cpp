@@ -20,7 +20,7 @@ short Server::control()
 	short state = 0;
 
 	window.create(sf::VideoMode(), "Controller", sf::Style::Fullscreen);
-	window.setFramerateLimit(60);
+	window.setFramerateLimit(30);
 	window.clear();
 	window.display();
 	

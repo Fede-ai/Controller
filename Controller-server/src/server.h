@@ -3,7 +3,6 @@
 #include "SFML/Graphics.hpp"
 #include <iostream>
 #include <chrono>
-#include <thread>
 #include <windows.h>
 
 class Server
