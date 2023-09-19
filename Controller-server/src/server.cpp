@@ -19,7 +19,7 @@ short Server::control()
 	updateKeys(lastKeys);
 	short state = 0;
 
-	window.create(sf::VideoMode(), "Controller", sf::Style::Fullscreen);
+	window.create(sf::VideoMode::getDesktopMode(), "Controller", sf::Style::Fullscreen);
 	window.setFramerateLimit(30);
 	window.clear();
 	window.display();
