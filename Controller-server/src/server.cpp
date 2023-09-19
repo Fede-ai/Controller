@@ -43,14 +43,17 @@ short Server::control()
 			}
 		}
 
-		sf::Packet packet;
-		fillPacket(packet);
+		if (window.hasFocus())
+		{
+			sf::Packet packet;
+			fillPacket(packet);
 
-		if (packet.getDataSize() > 0)
-			state = client.send(packet);
+			if (packet.getDataSize() > 0)
+				state = client.send(packet);
 
-		if (state == sf::Socket::Disconnected)
-			window.close();
+			if (state == sf::Socket::Disconnected)
+				window.close();
+		}
 
 		window.display();
 	}
