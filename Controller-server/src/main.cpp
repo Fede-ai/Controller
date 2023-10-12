@@ -7,8 +7,12 @@ int main()
 
 	reconnect:
 	server.initConnection();
-	if (server.control() == 3)
+
+	control:
+	if (server.control() == 1)
 		goto reconnect;
+	else
+		goto control;
 
 	return 0;
 }	

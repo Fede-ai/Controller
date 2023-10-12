@@ -11,7 +11,8 @@ class Server
 public:	
 	void outputAddresses();
 	void initConnection();
-	short control();
+	//1 = disconnected
+	bool control();
 
 private:
 	void fillPacket(sf::Packet& packet);
@@ -20,7 +21,13 @@ private:
 	sf::RenderWindow window;
 	sf::TcpListener listener;
 	sf::TcpSocket client;
-	
+
+	bool isMouseEnabled = false;
+	bool canEnableMouse = false;
+
+	bool isMouseFixed = false;
+	bool canFixMouse = false;
+
 	short lastKeys[256];
 	int currentFps = 0;
 	sf::Int8 deltaWheel = 0;
