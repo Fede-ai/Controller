@@ -1,5 +1,29 @@
 #include "server.h"
 
+void Server::run()
+{
+	outputAddresses();
+
+	while (true)
+	{
+		bool canControl = false;
+		initConnection();
+
+		while (isConnected)
+		{
+			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Numpad0))
+			{
+				if (canControl)
+					control();
+			}
+			else
+			{
+				canControl = true;
+			}
+		}
+	}
+}
+
 void Server::initConnection()
 {
 	int state;
@@ -14,39 +38,30 @@ void Server::initConnection()
 	} while (state != sf::Socket::Done);
 }
 
-bool Server::control()
+void Server::control()
 {
-	while (sf::Keyboard::isKeyPressed(sf::Keyboard::Numpad0)) {}
-	while (!sf::Keyboard::isKeyPressed(sf::Keyboard::Numpad0)) {}
-	while (sf::Keyboard::isKeyPressed(sf::Keyboard::Numpad0)) {}
-
 	updateKeys(lastKeys);
 	window.create(sf::VideoMode::getDesktopMode(), "Controller", sf::Style::Fullscreen);
 	window.setFramerateLimit(40);
-	window.clear();
-	window.display();
-	isMouseEnabled = false, isMouseFixed = false;
+	window.clear(sf::Color(50, 50, 50));
+
+	isMouseEnabled = false, canEnableMouse = false;
+	bool isMouseFixed = false, canFixMouse = false;
+	bool canClose = false;
+
 	sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
 	lastXProp = mousePos.x / window.getSize().x * 10000.f;
 	lastYProp = mousePos.y / window.getSize().y * 10000.f;
 
 	while (window.isOpen())
 	{
-		short state = 0;
 		sf::Event event;
 		while (window.pollEvent(event))
 		{
 			switch (event.type)
 			{
 			case sf::Event::Closed:
-				if (isMouseFixed)
-				{
-					sf::Packet packet;
-					packet << sf::Int16(300);
-					state = client.send(packet);
-				}
 				window.close();
-				return 0;
 				break;
 			case sf::Event::MouseWheelScrolled:
 				deltaWheel = event.mouseWheelScroll.delta;
@@ -56,14 +71,15 @@ bool Server::control()
 
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Numpad0))
 		{
-			if (isMouseFixed)
+			if (canClose)
 			{
-				sf::Packet packet;
-				packet << sf::Int16(300);
-				state = client.send(packet);
+				window.close();
 			}
-			window.close();
-			return 0;
+			canClose = false;
+		}
+		else
+		{
+			canClose = true;
 		}
 
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Numpad1))
@@ -87,7 +103,7 @@ bool Server::control()
 
 				sf::Packet packet;
 				packet << sf::Int16(300);
-				state = client.send(packet);
+				isConnected = (client.send(packet) == sf::Socket::Done);
 			}
 			canFixMouse = false;
 		}
@@ -102,16 +118,20 @@ bool Server::control()
 			fillPacket(packet);
 
 			if (packet.getDataSize() > 0)
-				state = client.send(packet);
+				isConnected = (client.send(packet) == sf::Socket::Done);
 
-			if (state == sf::Socket::Disconnected)
-			{
+			if (!isConnected)
 				window.close();
-				return 1;
-			}
 		}
 
 		window.display();
+	}		
+
+	if (isMouseFixed)
+	{
+		sf::Packet packet;
+		packet << sf::Int16(300);
+		client.send(packet);
 	}
 }
 

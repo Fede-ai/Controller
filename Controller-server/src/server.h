@@ -9,12 +9,15 @@
 class Server
 {
 public:	
+	void run();
+
+private:	
+
 	void outputAddresses();
 	void initConnection();
 	//1 = disconnected
-	bool control();
+	void control();
 
-private:
 	void fillPacket(sf::Packet& packet);
 	static void updateKeys(short* keys);
 
@@ -25,9 +28,7 @@ private:
 	bool isMouseEnabled = false;
 	bool canEnableMouse = false;
 
-	bool isMouseFixed = false;
-	bool canFixMouse = false;
-
+	bool isConnected = false;
 	short lastKeys[256];
 	int currentFps = 0;
 	sf::Int8 deltaWheel = 0;
