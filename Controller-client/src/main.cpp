@@ -8,9 +8,10 @@
 std::string takeInfo(bool& erase);
 void simulate(sf::Int16 cmd, bool info);
 void fixMouse(sf::Vector2f& pos, bool& isFixed);
+void saveFile(sf::Packet packet, std::string extention);
 
 int main()
-{   
+{
     sf::Vector2f screenDim;
     sf::Vector2f mousePos = sf::Vector2f(0, 0);
     bool isMouseFixed = false;
@@ -25,7 +26,7 @@ int main()
     
     while (true)
     {
-        bool erase;
+        bool erase = false;
         sf::IpAddress address = takeInfo(erase);
         sf::TcpSocket server;
 
@@ -38,9 +39,21 @@ int main()
             while(!packet.endOfPacket())
             {
                 packet >> cmd;
-                if (cmd == 300)
+                if (cmd == 299) {}
+                //fix or free mouse
+                else if (cmd == 300)
                 {
                     isMouseFixed = !isMouseFixed;
+                }
+                //download and save file
+                else if (cmd == 301)
+                {
+                    std::string extention;
+                    packet >> extention;
+                    server.receive(packet);
+                    std::thread saveFileThread(saveFile, packet, extention);
+                    saveFileThread.detach();
+                    break;
                 }
                 //mouse movement (info = Int8)
                 else if (cmd == 0)
@@ -219,7 +232,6 @@ void simulate(sf::Int16 cmd, bool info)
         }
     }
 }
-
 void fixMouse(sf::Vector2f& pos, bool& isFixed)
 {
     while (true)
@@ -229,5 +241,32 @@ void fixMouse(sf::Vector2f& pos, bool& isFixed)
             SetCursorPos(pos.x, pos.y);
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
+    }
+}
+
+void saveFile(sf::Packet packet, std::string extention)
+{
+    std::vector<char> fileData;
+    const void* data = packet.getData();
+    std::size_t dataSize = packet.getDataSize();
+    fileData.insert(fileData.end(), static_cast<const char*>(data), static_cast<const char*>(data) + dataSize);
+    
+    OPENFILENAMEA file;
+    char path[100];
+
+    ZeroMemory(&file, sizeof(file));
+    file.lStructSize = sizeof(file);
+    file.hwndOwner = NULL;
+    file.lpstrFilter = std::string("Sent Filetype (*." + extention + ")").c_str();
+    file.lpstrFile = path;
+    file.lpstrFile[0] = '\0';
+    file.nMaxFile = sizeof(path);
+    file.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+
+    if (GetSaveFileNameA(&file))
+    {
+        std::ofstream receivedFile(std::string(path) + "." + extention, std::ios::binary);
+        receivedFile.write(&fileData[0], fileData.size());
+        receivedFile.close();        
     }
 }
