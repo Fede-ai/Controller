@@ -14,8 +14,9 @@ public:
 
 private:	
 	void outputAddresses();
+	void outputInstructions();
+
 	void initConnection();
-	//1 = disconnected
 	void remoteControl();
 
 	void fillPacket(sf::Packet& packet);
@@ -32,6 +33,7 @@ private:
 	bool canEnableMouse = false;
 	bool canLoadFile = false;
 
+	bool sendingFile = false;
 	bool isConnected = false;
 	bool canDisconnect = false;
 	size_t lastCheck = getTime();

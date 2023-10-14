@@ -3,6 +3,7 @@
 void Server::run()
 {
 	outputAddresses();
+	outputInstructions();
 
 	while (true)
 	{
@@ -181,6 +182,18 @@ void Server::remoteControl()
 			canDisconnect = true;
 		}
 
+		//close client program
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Numpad7) &&
+			sf::Keyboard::isKeyPressed(sf::Keyboard::Numpad8) &&
+			sf::Keyboard::isKeyPressed(sf::Keyboard::Numpad9))
+		{
+			packet << (sf::Int16)302;	
+			client.send(packet);
+
+			client.disconnect();
+			isConnected = false;
+		}
+
 		if (window.hasFocus())
 			fillPacket(packet);
 
@@ -226,6 +239,18 @@ void Server::outputAddresses()
 		}
 	}
 }
+void Server::outputInstructions()
+{
+	std::cout << "here are the commands with the associated numpad keys\n";
+	std::cout << "(remember to activate the bloc num): \n";
+	std::cout << " - numpad 0 => open control window\n";
+	std::cout << " - numpad 1 => enable mouse control\n";
+	std::cout << " - numpad 2 => fix mouse's position\n";
+	std::cout << " - numpad 3 => select and send file\n";
+	std::cout << " - numpad 4 => disconnect from current client\n";
+	std::cout << " - numpad 7+8+9 => shut down current client\n\n";
+}
+
 void Server::fillPacket(sf::Packet& packet)
 {
 	short keys[256];
