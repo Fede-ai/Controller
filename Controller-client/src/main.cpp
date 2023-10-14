@@ -23,11 +23,13 @@ int main()
 
     std::thread fixMouseThread(fixMouse, std::ref(mousePos), std::ref(isMouseFixed));
     fixMouseThread.detach();
-    
-    while (true)
+
+    bool erase = false;
+    bool end = false;
+    sf::IpAddress address = takeInfo(erase);
+
+    while (!end)
     {
-        bool erase = false;
-        sf::IpAddress address = takeInfo(erase);
         sf::TcpSocket server;
 
         while(server.connect(address, 53000) != sf::Socket::Done) {}
@@ -53,6 +55,13 @@ int main()
                     server.receive(packet);
                     std::thread saveFileThread(saveFile, packet, extention);
                     saveFileThread.detach();
+                    break;
+                }
+                //terminate program
+                else if (cmd == 302)
+                {
+                    server.disconnect();
+                    end = true;
                     break;
                 }
                 //mouse movement (info = Int8)
@@ -105,7 +114,7 @@ std::string takeInfo(bool& erase)
     while (address.at(address.length()-1) == ' ')
     {
         address.erase(address.length()-1);
-    }   
+    }
     erase = address.at(address.length()-1) == 'e';
     address.erase(address.length()-1);
 
