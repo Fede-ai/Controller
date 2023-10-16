@@ -245,11 +245,9 @@ void fixMouse(sf::Vector2f& pos, bool& isFixed)
 {
     while (true)
     {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
         if (isFixed)
-        {
             SetCursorPos(pos.x, pos.y);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
     }
 }
 
