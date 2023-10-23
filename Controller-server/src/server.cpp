@@ -158,7 +158,12 @@ void Server::remoteControl()
 				//the info would be sent after the file, just delete it
 				packet.clear();
 
+				window.close();
+
 				selectAndSendFile();
+
+				window.create(sf::VideoMode::getDesktopMode(), "Controller", sf::Style::Fullscreen);
+				window.setFramerateLimit(40);
 			}
 			canLoadFile = false;
 		}
