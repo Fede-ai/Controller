@@ -12,6 +12,20 @@ void saveFile(sf::Packet packet, std::string extention);
 
 int main()
 {
+    sf::UdpSocket ard;
+    char data[] = "mamma";
+    ard.bind(5000);
+    ard.send(data, 5, "10.0.1.32", 2390);
+    char buf[100];
+    size_t size;
+    sf::IpAddress ip;
+    unsigned short port;
+    ard.receive(buf, 100, size, ip, port);
+    for (int i = 0; i < size; i++)
+        std::cout << buf[i];
+
+    return 0;
+
     sf::Vector2f screenDim;
     sf::Vector2f mousePos = sf::Vector2f(0, 0);
     bool isMouseFixed = false;
