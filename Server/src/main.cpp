@@ -1,9 +1,10 @@
 #include <Arduino.h>
-#include <WiFiS3.h>
+#include "udpClient.hpp"
+#include <vector>
 
-int status = WL_IDLE_STATUS;
-unsigned int localPort = 2390;
 WiFiUDP Udp;
+unsigned long lastCheck = 0;
+std::vector<UdpClient> clients;
 
 void setup() {
   Serial.begin(9600);
@@ -19,8 +20,9 @@ void setup() {
     Serial.println("upgrade the WiFi firmware");
   }
 
-	char ssid[] = "marife", pass[] = "cicciociccio";
+	char ssid[] = "FASTWEB-D4756D", pass[] = "TY62M4NM9M";
   //connect to WiFi network
+	int status = WL_IDLE_STATUS;
   while (status != WL_CONNECTED) {
     Serial.print("connecting to SSID: ");
     Serial.println(ssid);
@@ -35,34 +37,60 @@ void setup() {
 	Serial.println(" dBm");
 
 	//bind udp socket to port
-  Udp.begin(localPort);
+  Udp.begin(2390);
+	lastCheck = millis();
 }
 
 void loop() {
   //if there's data available, read a packet
   int packetSize = Udp.parsePacket();
-  if (packetSize) {
-    Serial.print("Received packet of size ");
-    Serial.println(packetSize);
-    Serial.print("From ");
-    IPAddress remoteIp = Udp.remoteIP();
-    Serial.print(remoteIp);
-    Serial.print(", port ");
-    Serial.println(Udp.remotePort());
+  if (packetSize) {		
+		char buffer[20];
+    int len = Udp.read(buffer, 20);
+		//r is used to keep the client awake
+		//v = new victiv connection
+		if (buffer[0] == 'v') {
+			UdpClient v;
+			v.ip = Udp.remoteIP();
+			v.port = Udp.remotePort()+1;
+			std::string time(buffer);
+			time.erase(time.begin());
+			v.time = stoi(time);
+			clients.push_back(v);
 
-    //read the packet into a buffer
-		char buffer[256];
-    int len = Udp.read(buffer, 255);
-    if (len > 0) {
-      buffer[len] = 0;
-    }
-    Serial.println("Contents:");
-    Serial.println(buffer);
+			Serial.print("v: "); 
+			Serial.print(v.ip.toString()); 
+			Serial.print(":");
+			Serial.print(v.port);
+			Serial.print(", time: ");
+			Serial.println(v.time);
+		}
 
-    //send a reply, to the IP address and port that sent us the packet we received
-		char resp[] = "response";
-    Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
-    Udp.write(resp);
-    Udp.endPacket();
+		//flag the client as active
+		for (auto& c : clients) {
+			if (c.ip == Udp.remoteIP() && c.port == Udp.remotePort()) {
+				c.isActive = true;
+				break;
+			}
+		}
   }
+
+	//check for inactivity
+	if (millis() - lastCheck > 10'000) {
+		for (int i = 0; i < clients.size(); i++) {
+			//disconnect a client if he hasnt been active in 10 secs
+			if (!clients[i].isActive) {
+				Serial.print(clients[i].ip.toString()); 
+				Serial.print(":"); 
+				Serial.print(clients[i].port);
+				Serial.println(" disconnected due to timeout");
+				clients.erase(clients.begin() + i);
+				i--;
+			}
+			else {
+				clients[i].isActive = false;
+			}
+		}
+		lastCheck = millis();
+	}
 }
