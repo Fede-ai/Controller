@@ -2,7 +2,7 @@
 #include "udpClient.hpp"
 #include <vector>
 
-WiFiUDP Udp;
+WiFiUDP socket;
 unsigned long lastCheck = 0;
 std::vector<UdpClient> clients;
 
@@ -37,26 +37,30 @@ void setup() {
 	Serial.println(" dBm");
 
 	//bind udp socket to port
-  Udp.begin(2390);
+  socket.begin(2390);
 	lastCheck = millis();
 }
 
 void loop() {
   //if there's data available, read a packet
-  int packetSize = Udp.parsePacket();
+  int packetSize = socket.parsePacket();
   if (packetSize) {		
 		char buffer[20];
-    int len = Udp.read(buffer, 20);
+    int len = socket.read(buffer, 20);
 		//r is used to keep the client awake
 		//v = new victiv connection
 		if (buffer[0] == 'v') {
 			UdpClient v;
-			v.ip = Udp.remoteIP();
-			v.port = Udp.remotePort()+1;
+			v.ip = socket.remoteIP();
+			v.port = socket.remotePort()+1;
 			std::string time(buffer);
 			time.erase(time.begin());
 			v.time = stoi(time);
 			clients.push_back(v);
+
+			socket.beginPacket(socket.remoteIP(), socket.remotePort());
+   	 	socket.write("a");
+    	socket.endPacket();
 
 			Serial.print("v: "); 
 			Serial.print(v.ip.toString()); 
@@ -68,7 +72,7 @@ void loop() {
 
 		//flag the client as active
 		for (auto& c : clients) {
-			if (c.ip == Udp.remoteIP() && c.port == Udp.remotePort()) {
+			if (c.ip == socket.remoteIP() && c.port == socket.remotePort()) {
 				c.isActive = true;
 				break;
 			}
