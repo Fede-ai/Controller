@@ -1,6 +1,4 @@
-#include "server.h"
-
-void Server::run()
+/*void Server::run()
 {
 	outputAddresses();
 	outputInstructions();
@@ -261,12 +259,12 @@ void Server::fillPacket(sf::Packet& packet)
 	short keys[256];
 	updateKeys(keys);
 
-	/*
-	if ((keys[0x41] & 0x01) && lastKeys[0x41] == 0)
-		std::cout << "pressed\n";
-	if (keys[0x41] == 0 && lastKeys[0x41] != 0)
-		std::cout << "released\n";
-	*/
+	
+	//if ((keys[0x41] & 0x01) && lastKeys[0x41] == 0)
+	//	std::cout << "pressed\n";
+	//if (keys[0x41] == 0 && lastKeys[0x41] != 0)
+	//	std::cout << "released\n";
+	
 
 	for (int i = 0; i < 256; i++)
 	{
@@ -354,4 +352,4 @@ void Server::updateKeys(short* keys)
 size_t Server::getTime()
 {
 	return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-}
+}*/

@@ -23,7 +23,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="server.h">
+    <ClInclude Include="client.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -4,6 +4,7 @@
 
 WiFiUDP socket;
 unsigned long lastCheck = 0;
+unsigned long lastUpdate = 0;
 std::vector<UdpClient> clients;
 
 void sendControllers(std::string msg)
@@ -57,7 +58,7 @@ void setup() {
 void loop() {
   //if there's data available, read a packet
   int packetSize = socket.parsePacket();
-  if (packetSize) {		
+  if (packetSize) {
 		char buffer[20];
     int len = socket.read(buffer, 20);
 		//r is used to keep the client awake
@@ -65,7 +66,7 @@ void loop() {
 		if (buffer[0] == 'v') {
 			UdpClient v;
 			v.ip = socket.remoteIP();
-			v.port = socket.remotePort()+1;
+			v.port = socket.remotePort();
 			std::string time(buffer);
 			time.erase(time.begin());
 			v.time = stoi(time);
@@ -74,8 +75,6 @@ void loop() {
 			socket.beginPacket(socket.remoteIP(), socket.remotePort());
    	 	socket.write("v");
     	socket.endPacket();
-
-			sendControllers('l' + v.ip.toString().c_str() + ';' + std::to_string(v.port));
 
 			Serial.print("v: "); 
 			Serial.print(v.ip.toString()); 
@@ -88,7 +87,7 @@ void loop() {
 		else if (buffer[0] == 'c') {
 			UdpClient c;
 			c.ip = socket.remoteIP();
-			c.port = socket.remotePort()+1;
+			c.port = socket.remotePort();
 			std::string time(buffer);
 			time.erase(time.begin());
 			c.time = stoi(time);
@@ -98,8 +97,6 @@ void loop() {
 			socket.beginPacket(socket.remoteIP(), socket.remotePort());
    	 	socket.write("c");
     	socket.endPacket();
-
-			sendControllers('n' + c.ip.toString().c_str() + ';' + std::to_string(c.port));
 
 			Serial.print("c: "); 
 			Serial.print(c.ip.toString()); 
@@ -135,5 +132,19 @@ void loop() {
 			}
 		}
 		lastCheck = millis();
+	}
+	//send client list
+	if (millis() - lastUpdate > 10'000) {
+		sendControllers("e");
+		for (auto c : clients) {
+			std::string msg = "";
+			msg = (c.isVictim) ? "l" : "n";
+			msg = msg + c.ip.toString().c_str() + ';'+ c.otherIp.c_str() + ';';
+			msg = msg + std::to_string(c.port) + ';'+ std::to_string(c.otherPort) + ';';
+			msg = msg + std::to_string(c.time) + ';';
+			sendControllers(msg);
+		}
+		sendControllers("d");
+		lastUpdate = millis();
 	}
 }

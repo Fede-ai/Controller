@@ -3,7 +3,7 @@
 struct UdpClient
 {
 	IPAddress ip = "";
-	IPAddress otherIp = "";
+	std::string otherIp = "-";
 	uint16_t port = 0;
 	uint16_t otherPort = 0;
 	
