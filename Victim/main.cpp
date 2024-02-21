@@ -35,6 +35,7 @@ int main()
 
     bool isPaired = false; //with controller
     sf::UdpSocket ard;
+    ard.bind(sf::Socket::AnyPort);
     std::string init = "v" + std::to_string(int(Mlib::getTime()/1000));
     ard.send(init.c_str(), init.size()+1, SERVER_IP, SERVER_PORT);
     std::thread thr(keepConnected, std::ref(ard));
@@ -43,17 +44,19 @@ connect:
     size_t size;
     sf::IpAddress ip;
     unsigned short port;
-    ard.bind(sf::Socket::AnyPort);
     char buf[1];
     ard.receive(buf, sizeof(buf), size, ip, port);
 
     if (ip != SERVER_IP || port != SERVER_PORT || size != 1 || buf[0] != 'v')
         goto connect;
 
+    std::cout << "started connection with server\n";
     while (true)
     {
         char msg[10];
         ard.receive(msg, sizeof(msg), size, ip, port);
+        std::cout << msg << "\n";
+
         if (ip != SERVER_IP || port != SERVER_PORT)
             continue;
 
