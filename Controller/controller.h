@@ -9,7 +9,7 @@
 class Controller
 {
 public:
-	Controller(sf::UdpSocket& s);
+	Controller(sf::UdpSocket* s);
 	void receiveInfo();
 	void takeCmdInput();
 	void controlWindow();
@@ -17,7 +17,9 @@ public:
 private:
 	std::vector<Client> controllers, victims;
 	bool isPaired = false, isControlling = false;
-	sf::UdpSocket& socket;
+	sf::UdpSocket* socket;
 	sf::RenderWindow w;
+	const std::string pIp = sf::IpAddress::getPublicAddress().toString();
+	const std::string lIp = sf::IpAddress::getLocalAddress().toString();
 };
 
