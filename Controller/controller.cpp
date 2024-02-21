@@ -94,3 +94,21 @@ void Controller::receiveInfo()
         }
     }
 }
+
+void Controller::takeCmdInput()
+{
+}
+
+void Controller::controlWindow()
+{
+    if (w.isOpen())
+    {
+        sf::Event e;
+        while (w.pollEvent(e))
+        {
+
+        }
+    
+        
+    }
+}

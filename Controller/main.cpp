@@ -25,12 +25,12 @@ int main()
             Mlib::sleep(5000);
             s.send("r", 2, SERVER_IP, SERVER_PORT);
         }
-    };
+    };  
 
     sf::UdpSocket ard;
     ard.bind(sf::Socket::AnyPort);
     std::string init = "c" + std::to_string(int(Mlib::getTime() / 1000));
-    ard.send(init.c_str(), init.size() + 1, SERVER_IP, SERVER_PORT);
+    ard.send(init.c_str(), sizeof(init.c_str()), SERVER_IP, SERVER_PORT);
 
     size_t size;
     sf::IpAddress ip;
@@ -44,7 +44,10 @@ int main()
     std::cout << "started connection with server\n";
     Controller controller(ard);
     std::thread receive(&Controller::receiveInfo, &controller);
+    std::thread input(&Controller::takeCmdInput, &controller);
 
+    while (true)
+        controller.controlWindow();
 
 	return 0;
 }	
