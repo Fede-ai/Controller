@@ -154,7 +154,7 @@ void Controller::takeCmdInput()
     }
 }
 
-void Controller::controlWindow()
+int Controller::controlWindow()
 {
     bool keys[255];
     for (int i = 0; i < 256; i++)
@@ -183,7 +183,6 @@ void Controller::controlWindow()
             }
         }
 
-        //to do: remove mouse keys and tab
         for (int i = 0; i < 256; i++)
         {
             bool state = Mlib::Keyboard::isKeyPressed(Mlib::Keyboard::Key(i));
@@ -192,7 +191,7 @@ void Controller::controlWindow()
                 str = str + char(i);
                 socket->send(str.c_str(), str.size(), SERVER_IP, SERVER_PORT);
             }
-            else if (Mlib::Keyboard::getAsyncState(Mlib::Keyboard::Key(i))) {
+            else if (state && !keys[i]) {
                 std::string str = "n";
                 str = str + char(i);
                 socket->send(str.c_str(), str.size(), SERVER_IP, SERVER_PORT);
@@ -202,4 +201,6 @@ void Controller::controlWindow()
 
         w.display();
     }
+
+    return -1;
 }

