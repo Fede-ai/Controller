@@ -203,9 +203,7 @@ int Controller::controlWindow()
         if (!w.isOpen())
         {
             if (isControlling) {
-                w.create(sf::VideoMode::getDesktopMode(), "Controller", sf::Style::Fullscreen);
-                w.clear(sf::Color(30, 30, 30));
-                w.display();
+                w.create(sf::VideoMode(0, 0), "Controller", sf::Style::Fullscreen);
                 w.setFramerateLimit(20);
             }
             else
@@ -254,6 +252,7 @@ int Controller::controlWindow()
             keys[i] = state;
         }
 
+        w.clear(sf::Color(30, 30, 30));
         w.display();
     }
 
