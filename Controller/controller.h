@@ -8,7 +8,7 @@
 #include <sstream>
 
 #define SERVER_IP "2.235.241.210"
-#define SERVER_PORT 2390
+#define SERVER_PORT 9002
 
 class Controller
 {

@@ -12,47 +12,39 @@ p: paired with
 */
 
 int main()
-{	
-    auto sendRs = [](sf::UdpSocket& s) {
-        while (true)
-        {
-            Mlib::sleep(2000);
-            s.send("r", 1, SERVER_IP, SERVER_PORT);
-        }
-    };  
-    auto connectServer = [](sf::UdpSocket& s, bool& connected) {
-        while (!connected)
-        {
-            std::string init = "c" + std::to_string(int(Mlib::getTime() / 1000));
-            s.send(init.c_str(), init.size(), SERVER_IP, SERVER_PORT);
-            Mlib::sleep(2000);
-        }
-    };
+{
+    sf::TcpSocket ser;
+    sf::Socket::Status status;
+    do {
+        status = ser.connect(SERVER_IP, SERVER_PORT);
+    } while (status != sf::Socket::Done);
+    std::cout << "connected with server\n";
+    
+    char code = '-';
+    do {
+        std::string str = "c";
+        sf::Packet p;
+        p << str;
+        if (ser.send(p) != sf::Socket::Done)
+            continue;
 
-    sf::UdpSocket ard;
-    ard.bind(sf::Socket::AnyPort);
-    size_t size;
-    sf::IpAddress ip;
-    unsigned short port;
-    char buf[1];
-    bool connected = false;
+        p.clear();
+        if (ser.receive(p) != sf::Socket::Done)
+            continue;
 
-    std::thread stayAwake(sendRs, std::ref(ard));
-    stayAwake.detach();
-    std::thread connect(connectServer, std::ref(ard), std::ref(connected));
-    do {    
-        ard.receive(buf, sizeof(buf), size, ip, port);
-    } while (ip != SERVER_IP || port != SERVER_PORT || size != 1 || buf[0] != 'c');
-    connected = true;
-    connect.join();
+        if ((p >> str) && str.size() == 1)
+            code = str.at(0);
+    } while (code != 'c');
+    std::cout << "connection with server approved\n";
 
-    std::cout << "started connection with server\n";
-    Controller controller(&ard);
-    std::thread receive(&Controller::receiveInfo, &controller);
-    receive.detach();
-    std::thread input(&Controller::takeCmdInput, &controller);
-    input.detach();
+    return 0;
 
-    int code = controller.controlWindow();
-	return code;
+    //Controller controller(&ard);
+    //std::thread receive(&Controller::receiveInfo, &controller);
+    //receive.detach();
+    //std::thread input(&Controller::takeCmdInput, &controller);
+    //input.detach();
+    //
+    //int code = controller.controlWindow();
+	//return code;
 }	
