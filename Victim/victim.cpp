@@ -42,10 +42,10 @@ int Victim::controlVictim()
         }
         //mouse moved
         else if (cmd == 'l') {
-            sf::Uint8 a, b;
+            sf::Uint16 a, b;
             p >> a >> b;
-            float x = a / 256.f * screenSize.x;
-            float y = b / 256.f * screenSize.y;
+            float x = a / (256.f * 256.f) * screenSize.x;
+            float y = b / (256.f * 256.f) * screenSize.y;
             Mlib::Mouse::setPos(Mlib::Vec2i(x, y));
         }
         //wheel scrolled

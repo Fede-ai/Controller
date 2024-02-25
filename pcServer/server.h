@@ -11,14 +11,14 @@ public:
 	void receive();
 	
 private:
-	void processControllerMsg(int i, sf::Packet p);
-	void processVictimMsg(int i, sf::Packet p);
-	void disconnect(int i);
+	void processControllerMsg(sf::Uint8 id, sf::Packet p);
+	void processVictimMsg(sf::Uint8 id, sf::Packet p);
+	void disconnect(sf::Uint8 id);
 	void updateControllersList();
 
 	sf::Uint16 currentId = 0;
 	sf::SocketSelector selector;
 	sf::TcpListener listener;
-	std::vector<Client> clients;
+	std::map<sf::Uint16, Client> clients;
 };
 
