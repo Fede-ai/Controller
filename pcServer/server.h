@@ -18,10 +18,10 @@ private:
 	void disconnect(sf::Uint8 id);
 	void updateControllersList();
 
-	bool canReceive = true, isReceiving = false;
 	sf::Uint16 currentId = 0;
 	sf::SocketSelector selector;
 	sf::TcpListener listener;
 	std::map<sf::Uint16, Client> clients;
+	sf::Mutex mutex; //used for clients access
 };
 
