@@ -16,6 +16,13 @@ void Controller::controlWindow()
         keys[i] = Mlib::Keyboard::isKeyPressed(Mlib::Keyboard::Key(i));
 
     while (isRunning) {
+        if (Mlib::getTime() - lastAwakeSignal > 2'000) {
+            sf::Packet p;
+            p << sf::Uint8('r');
+            server.send(p);
+            lastAwakeSignal = Mlib::getTime();
+        }
+
         //open window - connect server - skip
         if (!w.isOpen()) {
             if (isControlling && isRunning) {

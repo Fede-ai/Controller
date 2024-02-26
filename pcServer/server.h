@@ -1,5 +1,6 @@
 #pragma once
 #include <iostream>
+#include <thread>
 #include "client.h"
 
 #define PORT 9002
@@ -11,11 +12,13 @@ public:
 	void receive();
 	
 private:
+	void checkAwake();
 	void processControllerMsg(sf::Uint8 id, sf::Packet p);
 	void processVictimMsg(sf::Uint8 id, sf::Packet p);
 	void disconnect(sf::Uint8 id);
 	void updateControllersList();
 
+	bool canReceive = true, isReceiving = false;
 	sf::Uint16 currentId = 0;
 	sf::SocketSelector selector;
 	sf::TcpListener listener;

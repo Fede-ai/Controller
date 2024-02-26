@@ -9,4 +9,5 @@ public:
 	sf::Uint32 time = Mlib::getTime()/1000;
 	char role = '-'; //can be '-', 'v', 'c'
 	sf::Uint16 pair = 0; //the id of this client's pair
+	size_t lastMsg = Mlib::getTime();
 };

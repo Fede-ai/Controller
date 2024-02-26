@@ -42,5 +42,6 @@ private:
 	const std::string ip = sf::IpAddress::getPublicAddress().toString();
 	sf::Uint16 id = 0;
 	Mlib::Vec2i lastMousePos = Mlib::Mouse::getPos();
+	size_t lastAwakeSignal = Mlib::getTime();
 };
 

