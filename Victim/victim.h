@@ -7,9 +7,6 @@
 #include <thread>
 #include <fstream>
 
-#define SERVER_IP "2.235.241.210"
-#define SERVER_PORT 9002
-
 class Victim
 {
 public:

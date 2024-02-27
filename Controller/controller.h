@@ -6,21 +6,8 @@
 #include "Mlib/Io/keyboard.hpp"
 #include "Mlib/Io/mouse.hpp"
 #include <iostream>
-#include <sstream>
+#include <fstream>
 #include <thread>
-
-#define SERVER_IP "2.235.241.210"
-#define SERVER_PORT 9002
-
-/* possible messages form server:
-c: controller accepted
-n: controller info
-l: victim info
-e: exit
-r: erase clients list
-d: display clients list
-p: paired with
-*/
 
 class Controller
 {
@@ -43,5 +30,6 @@ private:
 	sf::Uint16 id = 0;
 	Mlib::Vec2i lastMousePos = Mlib::Mouse::getPos();
 	size_t lastAwakeSignal = Mlib::getTime();
+	std::string name = "";
 };
 

