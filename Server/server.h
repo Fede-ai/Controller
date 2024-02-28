@@ -2,6 +2,7 @@
 #include <iostream>
 #include <thread>
 #include "client.h"
+#include "../secret.h"
 
 class Server
 {

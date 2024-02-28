@@ -1,5 +1,4 @@
 #include "controller.h"
-#include "../secret.h"
 
 Controller::Controller()
 {

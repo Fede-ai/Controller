@@ -6,6 +6,7 @@
 #include <iostream>
 #include <thread>
 #include <fstream>
+#include "../secret.h"
 
 class Victim
 {
@@ -15,7 +16,8 @@ public:
 
 private:
 	void keepAwake();
-	void connectServer();
+	void connectServer();	
+	void releaseAll();
 
 	bool isConnected = false, isRunning = true;
 	const Mlib::Vec2i screenSize = Mlib::displaySize();

@@ -1,5 +1,4 @@
 #include "server.h"
-#include "../secret.h"
 
 Server::Server()
 {

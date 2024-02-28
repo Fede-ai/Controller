@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <thread>
+#include "../secret.h"
 
 class Controller
 {

