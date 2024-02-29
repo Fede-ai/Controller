@@ -92,6 +92,8 @@ void Server::receive()
 void Server::checkAwake()
 {
 	while (true) {
+		//mutex used for clients access
+		mutex.lock();
 		//flag clients as afk if needed
 		std::vector<sf::Uint16> idsToRemove;
 		for (const auto& c : clients) {
@@ -99,8 +101,7 @@ void Server::checkAwake()
 				idsToRemove.push_back(c.first);
 		}
 
-		//disconnect afk clients (mutex used for clients write access)
-		mutex.lock();
+		//disconnect afk clients
 		for (auto id : idsToRemove) {
 			std::cout << "timed out - ";
 			disconnect(id);
@@ -143,7 +144,9 @@ void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
 		updateControllersList();
 	}
 	//forward events to victim
-	else if ((cmd == 'm' || cmd == 'n' || cmd == 'l' || cmd == 'k' || cmd == 'a')) {
+	else if (cmd == 'm' || cmd == 'n' || cmd == 'l' || cmd == 'k' ||
+		cmd == 'a' || cmd == 'z' || cmd == 's' || cmd == 'x') {
+
 		//controller is not paired
 		if (clients[id].pair == 0)
 			return;
@@ -160,6 +163,15 @@ void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
 		p << sf::Uint8('u');
 		//tell controller to unpair
 		clients[id].socket->send(p);
+
+		//stop keyboard control
+		p.clear();
+		p << sf::Uint8('z');
+		clients[clients[id].pair].socket->send(p);
+		//stop mouse control
+		p.clear();
+		p << sf::Uint8('x');
+		clients[clients[id].pair].socket->send(p);
 
 		//actually unpair the 2 clients
 		clients[clients[id].pair].pair = 0;
@@ -178,6 +190,11 @@ void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
 		//client isnt initialized
 		if (clients[oId].role == '-')
 			return;
+
+		p.clear();
+		p << sf::Uint8('e');
+		//tell the client to kill himself
+		clients[oId].socket->send(p);
 
 		std::cout << "killed - ";
 		disconnect(oId);
@@ -237,8 +254,13 @@ void Server::disconnect(sf::Uint8 id)
 		//if client is victim, tell his to release all keys
 		else if (clients[clients[id].pair].role == 'v')
 		{
+			//stop keyboard control
 			p.clear();
-			p << sf::Uint8('a');
+			p << sf::Uint8('z');
+			clients[clients[id].pair].socket->send(p);
+			//stop mouse control
+			p.clear();
+			p << sf::Uint8('x');
 			clients[clients[id].pair].socket->send(p);
 		}
 		

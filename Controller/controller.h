@@ -24,6 +24,7 @@ private:
 
 	std::vector<Client> controllers, victims;
 	bool isRunning = true, isConnected = false, isPaired = false, isControlling = false;
+	bool areSettingsOpen = false, sendKeys = false, sendMouse = false;
 	const Mlib::Vec2i screenSize = Mlib::displaySize();
 	sf::TcpSocket server;
 	sf::RenderWindow w;
@@ -32,5 +33,6 @@ private:
 	Mlib::Vec2i lastMousePos = Mlib::Mouse::getPos();
 	size_t lastAwakeSignal = Mlib::getTime();
 	std::string name = "";
+	sf::Font font;
 };
 

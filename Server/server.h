@@ -11,7 +11,7 @@ public:
 	void receive();
 	
 private:
-	void checkAwake();
+	void checkAwake(); //thread
 	void processControllerMsg(sf::Uint8 id, sf::Packet p);
 	void processVictimMsg(sf::Uint8 id, sf::Packet p);
 	void disconnect(sf::Uint8 id);
