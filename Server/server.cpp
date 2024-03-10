@@ -38,7 +38,7 @@ void Server::receive()
 			break;
 		}
 
-		c.second.lastMsg = Mlib::getTime();
+		c.second.lastMsg = Mlib::currentTime().asMil();
 
 		//process the packet if it was received by a controller
 		if (c.second.role == 'c')
@@ -97,7 +97,7 @@ void Server::checkAwake()
 		//flag clients as afk if needed
 		std::vector<sf::Uint16> idsToRemove;
 		for (const auto& c : clients) {
-			if (Mlib::getTime() - c.second.lastMsg > 5'000)
+			if (Mlib::currentTime().asMil() - c.second.lastMsg > 5'000)
 				idsToRemove.push_back(c.first);
 		}
 
@@ -109,7 +109,7 @@ void Server::checkAwake()
 		mutex.unlock();
 
 		//sleep to save processign power
-		Mlib::sleep(200);
+		Mlib::sleep(Mlib::milliseconds(200));
 	}
 }
 

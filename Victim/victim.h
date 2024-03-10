@@ -1,8 +1,8 @@
 #pragma once
 #include <SFML/Network.hpp>
-#include "Mlib/Util/util.hpp"
-#include "Mlib/Io/keyboard.hpp"
-#include "Mlib/Io/mouse.hpp"
+#include "Mlib/System/system.hpp"
+#include "Mlib/System/keyboard.hpp"
+#include "Mlib/System/mouse.hpp"
 #include <iostream>
 #include <thread>
 #include <fstream>
@@ -22,7 +22,7 @@ private:
 	bool controlMouse = false, controlKeybord = false;
 	bool isConnected = false, isRunning = true;
 	const Mlib::Vec2i screenSize = Mlib::displaySize();
-	size_t lastAwakeSignal = Mlib::getTime();
+	size_t lastAwakeSignal = Mlib::currentTime().asMil();
 	sf::TcpSocket server;
 	bool keysStates[256];
 	std::string name = "";

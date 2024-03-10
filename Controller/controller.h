@@ -2,9 +2,9 @@
 #include "client.h"
 #include <SFML/Network.hpp>
 #include <SFML/Graphics.hpp>
-#include "Mlib/Util/util.hpp"
-#include "Mlib/Io/keyboard.hpp"
-#include "Mlib/Io/mouse.hpp"
+#include "Mlib/System/keyboard.hpp"
+#include "Mlib/System/mouse.hpp"
+#include "Mlib/System/system.hpp"
 #include <iostream>
 #include <fstream>
 #include <thread>
@@ -31,7 +31,7 @@ private:
 	const std::string ip = sf::IpAddress::getPublicAddress().toString();
 	sf::Uint16 id = 0;
 	Mlib::Vec2i lastMousePos = Mlib::Mouse::getPos();
-	size_t lastAwakeSignal = Mlib::getTime();
+	size_t lastAwakeSignal = Mlib::currentTime().asMil();
 	std::string name = "";
 	sf::Font font;
 };
