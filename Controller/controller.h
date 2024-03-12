@@ -5,6 +5,7 @@
 #include "Mlib/System/keyboard.hpp"
 #include "Mlib/System/mouse.hpp"
 #include "Mlib/System/system.hpp"
+#include "Mlib/System/file.hpp"
 #include <iostream>
 #include <fstream>
 #include <thread>
@@ -21,6 +22,8 @@ private:
 	void takeCmdInput();
 	void connectServer();
 	void displayList();
+	void startSendingFile();
+	sf::Socket::Status sendServer(sf::Packet& p);
 
 	std::vector<Client> controllers, victims;
 	bool isRunning = true, isConnected = false, isPaired = false, isControlling = false;
@@ -34,5 +37,6 @@ private:
 	size_t lastAwakeSignal = Mlib::currentTime().asMil();
 	std::string name = "";
 	sf::Font font;
+	sf::Mutex mutex;
+	std::ifstream* file = nullptr;
 };
-

