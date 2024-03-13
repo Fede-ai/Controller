@@ -30,6 +30,8 @@ Controller::Controller()
 }
 void Controller::controlWindow()
 {
+    auto screenSize = Mlib::displaySize();
+
     //set all keys to the current key states
     bool keys[256];
     for (int i = 0; i < 256; i++)
@@ -183,7 +185,7 @@ void Controller::controlWindow()
                 else if (key == 2) {
                     sendKeys = !sendKeys;
                 }
-                else if (key == 3) {
+                else if (key == 3 && fileState < 0) {
                     std::thread sendFile(&Controller::startSendingFile, this);
                     sendFile.detach();
                 }
@@ -199,7 +201,17 @@ void Controller::controlWindow()
         str += "MOUSE [1] = ";
         str += ((sendMouse) ? "ACTIVE\n" : "INACTIVE\n");
         str += "KEYBOARD [2] = ";
-        str += ((sendKeys) ? "ACTIVE" : "INACTIVE");
+        str += ((sendKeys) ? "ACTIVE\n" : "INACTIVE\n");
+        str += "FILE [3] = ";
+        if (fileState == -1)
+            str += "READY";
+        else if (fileState == -2)
+            str += "SENT - READY";
+        else if (fileState == -3)
+            str += "FAILED - READY";
+        else if (fileState > 0)
+            str += std::to_string(fileState) + "/" + std::to_string(fileSize) + 
+            " BYTES - " + std::to_string(int((fileState * 100.f) / fileSize)) + "%";
 
         sf::Text txt(str, font, 20);
         txt.setPosition(8, 6);
@@ -272,11 +284,11 @@ void Controller::receiveInfo()
             file.write(name.c_str(), name.size());
             file.close();
         }
-        //send next 
+        //send next file packet
         else if (cmd == 'y') {
-            if (file != nullptr) {
-                char buffer[10'000];
-                file->read(buffer, 10'000);
+            if (file != nullptr && file->is_open()) {
+                char* buffer = new char[20'480];
+                file->read(buffer, 20'480);
                 size_t bytesRead = file->gcount();
 
                 if (bytesRead > 0) {
@@ -284,17 +296,38 @@ void Controller::receiveInfo()
                     p << sf::Uint8('o');
                     p.append(buffer, bytesRead);
                     sendServer(p);
-                    continue;
+
+                    if (fileState <= 0)
+                        fileState = static_cast<int>(bytesRead);
+                    else
+                        fileState += static_cast<int>(bytesRead);
                 }
                 else {
                     file->close();
-                    delete file;
+                    delete file; 
+                    file = nullptr;
+
+                    fileState = -2;
+                    p.clear();
+                    p << sf::Uint8('i') << ext;
+                    sendServer(p);
                 }
             }
+            else {
+                p.clear();
+                p << sf::Uint8('h');
+                sendServer(p);
+            }
+        }
+        //file fail
+        else if (cmd == 'h') {
+            if (file == nullptr)
+                continue;
 
-            sf::Packet p;
-            p << sf::Uint8('i');
-            sendServer(p);
+            fileState = -3;
+            file->close();
+            delete file;
+            file = nullptr;
         }
     }
 }
@@ -500,9 +533,14 @@ void Controller::startSendingFile()
     if (!file->is_open())
         return;
 
+    file->ignore(std::numeric_limits<std::streamsize>::max());
+    fileSize = file->gcount();
+    file->seekg(0);
+
+    ext = path.substr(path.find_first_of('.'));
+
     sf::Packet p;
     p << sf::Uint8('f');
-    p << path.substr(path.find_first_of('.'));
     sendServer(p);
 }
 

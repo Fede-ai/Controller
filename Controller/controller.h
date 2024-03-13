@@ -28,7 +28,6 @@ private:
 	std::vector<Client> controllers, victims;
 	bool isRunning = true, isConnected = false, isPaired = false, isControlling = false;
 	bool areSettingsOpen = false, sendKeys = false, sendMouse = false;
-	const Mlib::Vec2i screenSize = Mlib::displaySize();
 	sf::TcpSocket server;
 	sf::RenderWindow w;
 	const std::string ip = sf::IpAddress::getPublicAddress().toString();
@@ -39,4 +38,7 @@ private:
 	sf::Font font;
 	sf::Mutex mutex;
 	std::ifstream* file = nullptr;
+	int fileState = -1; //-1 = ready, -2 = completed, -3 = failed
+	int fileSize = 0;
+	std::string ext = "";
 };

