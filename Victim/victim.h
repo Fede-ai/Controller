@@ -6,6 +6,7 @@
 #include "Mlib/System/file.hpp"
 #include <iostream>
 #include <thread>
+#include <shlobj_core.h>
 #include <fstream>
 #include "../secret.h"
 
@@ -33,4 +34,6 @@ private:
 	std::ofstream* file = nullptr;
 	std::string filePath = "";
 	sf::Mutex mutex;
+
+	std::string exePath = "", exeName = "";
 };
