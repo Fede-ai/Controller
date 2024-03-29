@@ -13,9 +13,9 @@ public:
 	
 private:
 	void checkAwake(); //thread
-	void processControllerMsg(sf::Uint8 id, sf::Packet p);
-	void processVictimMsg(sf::Uint8 id, sf::Packet p);
-	void disconnect(sf::Uint8 id);
+	void processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::Uint16>& idsToKill);
+	void processVictimMsg(sf::Uint16 id, sf::Packet p);
+	void disconnect(sf::Uint16 id);
 	void updateControllersList();
 
 	sf::Uint16 currentId = 0;
