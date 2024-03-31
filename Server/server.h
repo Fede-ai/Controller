@@ -2,6 +2,7 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <fstream>
 #include "client.h"
 #include "../secret.h"
 

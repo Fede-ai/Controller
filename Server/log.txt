@@ -1,0 +1,5 @@
+1711925167 - started listening on port 9002
+1711925180 - 1 = new c - 192.168.0.167:50408
+1711925203 - 1 disconnected
+1711925212 - 2 = new c - 192.168.0.167:50414
+1711925221 - 2 disconnected
