@@ -4,12 +4,13 @@ Server::Server()
 {
 	//start listening to the port. if it fails, exit
 	if (listener.listen(SERVER_PORT) != sf::Socket::Done) {
-		std::cout << "listening failed\n";
+		auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+		std::cout << t << " - listening on port " << SERVER_PORT << " failed\n";
 		std::exit(-1);
-	}	
+	}
 	selector.add(listener);
 
-	std::ofstream log("./log.txt", std::ios::app);
+	std::ofstream log(LOG_PATH, std::ios::app);
 	auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	log << t << " - started listening on port " << SERVER_PORT << "\n";
 	std::cout << t << " - started listening on port " << SERVER_PORT << "\n";
@@ -41,7 +42,7 @@ void Server::receive()
 
 		//disconnect client
 		if (p.getDataSize() == 0) {
-			std::ofstream log("./log.txt", std::ios::app);
+			std::ofstream log(LOG_PATH, std::ios::app);
 			auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 			log << t << " - " << c.first << " disconnected\n";
 			std::cout << t << " - " << c.first << " disconnected\n";
@@ -74,9 +75,9 @@ void Server::receive()
 					p << sf::Uint16(c.first);
 				//tell the client that it has been initialized
 				c.second.socket->send(p);
-				c.second.role = role;			
-				
-				std::ofstream log("./log.txt", std::ios::app);
+				c.second.role = role;
+
+				std::ofstream log(LOG_PATH, std::ios::app);
 				auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 				auto add = c.second.socket->getRemoteAddress().toString() + ":" + std::to_string(c.second.socket->getRemotePort());
 				std::cout << t << " - " << c.first << " = new " << role << " - " << add << "\n";
@@ -93,7 +94,7 @@ void Server::receive()
 		}
 	}
 	for (const auto id : idsToKill) {
-		std::ofstream log("./log.txt", std::ios::app);
+		std::ofstream log(LOG_PATH, std::ios::app);
 		auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 		log << t << " - " << id << " killed\n";
 		std::cout << t << " - " << id << " killed\n";
@@ -132,7 +133,7 @@ void Server::checkAwake()
 
 		//disconnect afk clients
 		for (auto id : idsToRemove) {
-			std::ofstream log("./log.txt", std::ios::app);
+			std::ofstream log(LOG_PATH, std::ios::app);
 			auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 			log << t << " - " << id << " timed out\n";
 			std::cout << t << " - " << id << " timed out\n";
