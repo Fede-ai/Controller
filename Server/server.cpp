@@ -189,8 +189,8 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 
 		clients[clients[id].pair].socket->send(p);
 	}
-	//unpair controller from victim
-	else if (cmd == 'u' && clients[id].isAdmin) {
+	//unpair controller from victim (admin checked later)
+	else if (cmd == 'u') {
 		sf::Uint16 otherId;
 		p >> otherId;
 		//other client doesn't exist
@@ -198,6 +198,10 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 			return;
 		//other client is not paired
 		if (clients[otherId].pair == 0 || clients[otherId].role == '-')
+			return;
+
+		//check if controller has permissions
+		if (!clients[id].isAdmin && id != otherId)
 			return;
 
 		sf::Uint16 vId = 0, cId = 0;
@@ -364,12 +368,7 @@ void Server::updateControllersList()
 			if (c.second.role == 'c')
 				c.second.socket->send(p);
 		}
-	};
-
-	//tell controllers to clear clients list
-	sf::Packet p;
-	p << sf::Uint8('q');
-	sendControllers(p);
+	};	
 
 	//send to controllers each client info
 	for (const auto& c : clients) {
@@ -378,7 +377,7 @@ void Server::updateControllersList()
 			continue;
 
 		//load all client info
-		p.clear();
+		sf::Packet p;
 		p << ((c.second.role == 'c') ? sf::Uint8('n') : sf::Uint8('l')) << c.first << c.second.name << c.second.time;
 		p << c.second.socket->getRemoteAddress().toInteger() << c.second.socket->getRemotePort() << sf::Uint16(c.second.pair) << c.second.isAdmin;
 
@@ -387,7 +386,7 @@ void Server::updateControllersList()
 	}
 
 	//tell controllers to display clients list
-	p.clear();
+	sf::Packet p;
 	p << sf::Uint8('d');
 	sendControllers(p);
 }

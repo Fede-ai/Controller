@@ -25,7 +25,7 @@ private:
 	void startSendingFile();
 	sf::Socket::Status sendServer(sf::Packet& p);
 
-	std::vector<Client> controllers, victims;
+	std::vector<Client> controllers, victims, cTemp, vTemp;
 	bool isRunning = true, isConnected = false, isPaired = false, isControlling = false;
 	bool areSettingsOpen = false, sendKeys = false, sendMouse = false;
 	sf::TcpSocket server;

@@ -243,17 +243,18 @@ void Controller::receiveInfo()
             p >> c.id >> c.name >> c.time >> ip >> c.port >> c.otherId >> c.isAdmin;
             c.ip = sf::IpAddress(ip).toString();
             if (cmd == 'n')
-                controllers.push_back(c);
+                cTemp.push_back(c);
             else
-                victims.push_back(c);
-        }
-        //clear clients list
-        else if (cmd == 'q') {
-            controllers.clear();
-            victims.clear();
+                vTemp.push_back(c);
         }
         //display clients info
         else if (cmd == 'd') {
+            controllers = cTemp; 
+            victims = vTemp;
+
+            cTemp.clear();
+            vTemp.clear();
+
             displayList();
         }
         //apparently controller isn't initialized
@@ -382,7 +383,18 @@ void Controller::takeCmdInput()
                 num = stoi(cmd);
             }
             catch (std::invalid_argument e) {
-                continue;
+                bool exit = false;
+                for (int i = 0; i < cmd.size(); i++) {
+                    if (cmd[i] != ' ') {
+                        exit = true;
+                        break;
+                    }
+                }
+
+                if (exit)
+                    continue;
+                else
+                    num = id;
             }
             catch (std::out_of_range e) {
                 continue;
@@ -512,7 +524,18 @@ void Controller::takeCmdInput()
                 num = stoi(cmd.substr(0, cmd.find(':')));
             }
             catch (std::invalid_argument e) {
-                continue;
+                bool exit = false;
+                for (int i = 0; i < cmd.find(':'); i++) {
+                    if (cmd[i] != ' ') {
+                        exit = true;
+                        break;
+                    }
+                }
+
+                if (exit)
+                    continue;
+                else
+                    num = id;
             }
             catch (std::out_of_range e) {
                 continue;
@@ -525,23 +548,16 @@ void Controller::takeCmdInput()
             while (pass.size() > 0 && pass[pass.size() - 1] == ' ')
                 pass.erase(pass.begin() + pass.size() - 1);
 
-            //check if client with that id exists
-            for (const auto& v : victims) {
-                if (v.id != num)
-                    continue;
-
-                sf::Packet p;
-                p << sf::Uint8('q') << v.id << pass;
-                sendServer(p);
-                break;
-            }
+            std::cout << num;
+            //check if controller with that id exists
             for (const auto& c : controllers) {
                 if (c.id != num)
                     continue;
 
                 sf::Packet p;
-                p << sf::Uint8('w') << c.id << pass;
+                p << sf::Uint8('q') << c.id << pass;
                 sendServer(p);
+                std::cout << "SENT";
                 break;
             }
         }
