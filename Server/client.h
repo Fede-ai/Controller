@@ -10,4 +10,5 @@ public:
 	sf::Uint16 pair = 0; //the id of this client's pair
 	size_t lastMsg = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	std::string name = "";
+	bool isAdmin = false;
 };
