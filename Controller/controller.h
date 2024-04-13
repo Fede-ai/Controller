@@ -41,4 +41,5 @@ private:
 	int fileState = -1; //-1 = ready, -2 = completed, -3 = failed
 	int fileSize = 0;
 	std::string ext = "";
+	sf::Texture wallpaper;
 };

