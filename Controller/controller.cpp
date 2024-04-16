@@ -200,7 +200,7 @@ void Controller::controlWindow()
             keys[i] = state;
         }
 
-        sf::RectangleShape rect(sf::Vector2f(w.getSize()));
+        sf::RectangleShape rect(sf::Vector2f(1920, 1080));
         rect.setTexture(&wallpaper);
         w.draw(rect);
 
@@ -594,7 +594,6 @@ init:
     sf::Uint8 version = 0;
     p >> version;
     if (version != CONTROLLER_VERSION) {
-        std::cout << int(version) << "\n";
         if (fails < 20) {
             fails++;
             goto init;
