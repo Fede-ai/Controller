@@ -20,7 +20,10 @@ private:
 	void keepAwake();
 	void connectServer();
 	void createNewFile();
+
 	void pinMouse();
+	void shareScreen();
+
 	sf::Socket::Status sendServer(sf::Packet& p);
 
 	bool controlMouse = false, controlKeyboard = false;
@@ -36,4 +39,6 @@ private:
 	sf::Mutex mutex;
 
 	std::string exePath = "", exeName = "";
+	bool isSharingScreen = false;
+	std::pair<sf::Vector2<sf::Uint16>, sf::Vector2<sf::Uint16>> sharingRect;
 };
