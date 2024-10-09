@@ -157,7 +157,7 @@ void Controller::controlWindow()
 
         //send keys and buttons pressed-released events if needed
         for (int i = 0; i < 256; i++) {
-            //skip and ins key
+            //skip ins key
             if (i == 0x2D)
                 continue;
 
@@ -250,7 +250,7 @@ void Controller::controlWindow()
         txt.setStyle(sf::Text::Bold);
         txt.setFillColor(sf::Color(200, 200, 200));
         txt.setPosition(8, 6);
-        txt.setLineSpacing(1.4);
+        txt.setLineSpacing(1.4f);
         w.draw(txt);
 
         w.display();
@@ -701,7 +701,7 @@ void Controller::startSendingFile()
         return;
 
     file->ignore(std::numeric_limits<std::streamsize>::max());
-    fileSize = file->gcount();
+    fileSize = int(file->gcount());
     file->seekg(0);
 
     ext = path.substr(path.find_first_of('.'));

@@ -367,8 +367,7 @@ void Server::updateControllersList()
 {
 	//send a packet to all controllers
 	auto sendControllers = [this](sf::Packet p) {
-		for (auto& c : clients)
-		{
+		for (auto& c : clients) {
 			if (c.second.role == 'c')
 				c.second.socket->send(p);
 		}
@@ -385,7 +384,7 @@ void Server::updateControllersList()
 		p << ((c.second.role == 'c') ? sf::Uint8('n') : sf::Uint8('l')) << c.first << c.second.name << c.second.time;
 		p << c.second.socket->getRemoteAddress().toInteger() << c.second.socket->getRemotePort() << sf::Uint16(c.second.pair) << c.second.isAdmin;
 
-		//send clint info to all controllers
+		//send client info to all controllers
 		sendControllers(p);
 	}
 
