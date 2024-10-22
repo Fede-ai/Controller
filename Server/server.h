@@ -16,8 +16,10 @@ private:
 	void checkAwake(); //thread
 	void processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::Uint16>& idsToKill);
 	void processVictimMsg(sf::Uint16 id, sf::Packet p);
+
 	void disconnect(sf::Uint16 id);
 	void updateControllersList();
+	void writeLog(std::string s);
 
 	sf::Uint16 currentId = 0;
 	sf::SocketSelector selector;

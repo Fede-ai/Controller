@@ -4,17 +4,11 @@ Server::Server()
 {
 	//start listening to the port. if it fails, exit
 	if (listener.listen(SERVER_PORT) != sf::Socket::Done) {
-		auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-		std::cout << t << " - listening on port " << SERVER_PORT << " failed\n";
+		writeLog("listening on port " + std::to_string(SERVER_PORT) + " failed");
 		std::exit(-1);
 	}
 	selector.add(listener);
-
-	std::ofstream log(LOG_PATH, std::ios::app);
-	auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-	log << t << " - started listening on port " << SERVER_PORT << "\n";
-	std::cout << t << " - started listening on port " << SERVER_PORT << "\n";
-	log.close();
+	writeLog("started listening on port " + std::to_string(SERVER_PORT));
 
 	//start thread that checks if client are not asleep
 	std::thread checkAwakeThread(&Server::checkAwake, this);
@@ -42,12 +36,7 @@ void Server::receive()
 
 		//disconnect client
 		if (p.getDataSize() == 0) {
-			std::ofstream log(LOG_PATH, std::ios::app);
-			auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-			log << t << " - " << c.first << " disconnected\n";
-			std::cout << t << " - " << c.first << " disconnected\n";
-			log.close();
-
+			writeLog(std::to_string(c.first) + " disconnected");
 			disconnect(c.first);
 			break;
 		}
@@ -80,12 +69,9 @@ void Server::receive()
 				char role = (version == CONTROLLER_VERSION) ? 'c' : 'v';
 				c.second.role = role;
 
-				std::ofstream log(LOG_PATH, std::ios::app);
-				auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-				auto add = c.second.socket->getRemoteAddress().toString() + ":" + std::to_string(c.second.socket->getRemotePort());
-				std::cout << t << " - " << c.first << " = new " << role << " - " << add << "\n";
-				log << t << " - " << c.first << " = new " << role << " - " << add << "\n";
-				log.close();	
+				auto ip = c.second.socket->getRemoteAddress().toString() + ":" + 
+					std::to_string(c.second.socket->getRemotePort());
+				writeLog(std::to_string(c.first) + " = new " + role + " - " + ip);
 
 				updateControllersList();
 			}
@@ -96,13 +82,9 @@ void Server::receive()
 			}
 		}
 	}
+	//cycle through ids to kill and kill them
 	for (const auto id : idsToKill) {
-		std::ofstream log(LOG_PATH, std::ios::app);
-		auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-		log << t << " - " << id << " killed\n";
-		std::cout << t << " - " << id << " killed\n";
-		log.close();
-
+		writeLog(std::to_string(id) + " killed");
 		disconnect(id);
 	}
 
@@ -130,18 +112,14 @@ void Server::checkAwake()
 		//flag clients as afk if needed
 		std::vector<sf::Uint16> idsToRemove;
 		for (const auto& c : clients) {
+			//if more than 5 seconds are passed since last msg, client is afk
 			if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() - c.second.lastMsg > 5'000)
 				idsToRemove.push_back(c.first);
 		}
 
 		//disconnect afk clients
 		for (auto id : idsToRemove) {
-			std::ofstream log(LOG_PATH, std::ios::app);
-			auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-			log << t << " - " << id << " timed out\n";
-			std::cout << t << " - " << id << " timed out\n";
-			log.close();
-
+			writeLog(std::to_string(id) + " timed out");
 			disconnect(id);
 		}
 		mutex.unlock();
@@ -392,4 +370,15 @@ void Server::updateControllersList()
 	sf::Packet p;
 	p << sf::Uint8('d');
 	sendControllers(p);
+}
+
+void Server::writeLog(std::string s)
+{
+	auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+
+	std::ofstream file(LOG_PATH, std::ios::app);
+	file << t << " - " << s << "\n";
+	file.close();
+
+	std::cout << t << " - " << s << "\n";
 }

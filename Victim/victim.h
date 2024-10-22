@@ -21,10 +21,8 @@ private:
 	void connectServer();
 	void createNewFile();
 
-	void pinMouse();
+	void pinMouse() const;
 	void shareScreen();
-
-	sf::Socket::Status sendServer(sf::Packet& p);
 
 	bool controlMouse = false, controlKeyboard = false;
 	bool isConnected = false, isRunning = true;
@@ -35,10 +33,8 @@ private:
 	std::string name = "";
 	Mlib::Vec2i mousePos = Mlib::Vec2i(0, 0);
 	std::ofstream* file = nullptr;
-	std::string filePath = "";
-	sf::Mutex mutex;
+	std::string filePath = "", exePath = "";
 
-	std::string exePath = "", exeName = "";
 	bool isSharingScreen = false;
 	std::pair<sf::Vector2<sf::Uint16>, sf::Vector2<sf::Uint16>> sharingRect;
 };

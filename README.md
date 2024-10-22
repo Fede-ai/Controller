@@ -13,8 +13,8 @@
  <h3>Libraries needed 📖 :</h3>
 
  - This project relies on two different libraries:
-   - Mlib version `1.1.0` (my personal library - https://github.com/Fede-ai/Mlib/releases/tag/v1.1.0)
-   - SFML version `2.6.1` (https://www.sfml-dev.org/download/sfml/2.6.0/)
+   - Mlib version `1.2.0` (my personal library - https://github.com/Fede-ai/Mlib/releases/tag/v1.2.0)
+   - SFML version `2.6.1` (https://www.sfml-dev.org/download/sfml/2.6.1/)
  - For convenience, the default libraries path is set to `C:/` (it can be changed in the project's settings)
 
 <h3>Getting started 🎬 :</h3>
