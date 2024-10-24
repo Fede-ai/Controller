@@ -361,7 +361,9 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
 /secret.h
-Website/Controller.zip
-Website/Victim.zip
+/Website/Controller.zip
+/Website/Victim.zip
 /Controller/wallpaper.png
+/Server/log.txt

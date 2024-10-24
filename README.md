@@ -3,7 +3,7 @@
 <h3>Project overview 🗺️ :</h3>
 
 - This C++ project allows you to control another Windows computer wirelessly
-- It works using TCP sockets and a running server is needed to establish the connection
+- It works using TCP sockets and a server is needed to establish the connections
 - The project consists of three applications:
   - A `victim` app (Windows only) that has to be opened on a computer for it to be controlled
   - A `controller` app (Windows only) that lets you see the list of victims connected to the server and choose one of them to control
@@ -21,23 +21,24 @@
 
  - Clone this project on your computer
  - Download the necessary libraries 
-	- The default library and include path is set to `C:/` so if you install them in any other directory, you will need to adjust the paths
+	- The default library and include path is set to `C:/` so if you install them in any other directory, 
+you will need to adjust the paths from the projects' settings
  	- Remember to copy SFML's dlls to the release folder since it is linked dynamically
- - For the project to run, you need to add, to the root folder, a file named `secret.h`. In this file you **MUST** define the following macros:
+ - In order to compile the project, you need to add to the root folder a file named `secret.h`. In this file you **MUST** define the following macros:
 	- `SERVER_IP` => a string containing the ip address of the server
 	- `SERVER_PORT` => an integer which indicates the port to which the server will listen
-	- `LOG_PASS` => a string that tells the server where to write the logs (must also include file name and extension)
+	- `LOG_FILE` => a string that tells the server where to write the logs (must also include file name and extension)
 	- `PASS` => a string containing the password that controllers can use to access admin commands
-	- `CONTROLLER_VERSION` & `VICTIM_VERSION` => two integers between 128 and 255 (cannot be the same) that indicate the latest controller and victim versions. 
-The server will not accept connections from a version that is not the latest (these macros are only used for development, i recommend setting them to 128 and 129)
+	- `CONTROLLER_PASS` & `VICTIM_PASS` => two strings (shouldn't be the same) that allow client applications to verify themselves to the server.
+They are primarly using during development (so that older versions of the client aren't allowed access to the server)
  - Here is an example of what a `secret.h` file might look like:
 ```C++
 #define SERVER_IP "123.123.123.123"
 #define SERVER_PORT 8000
 #define LOG_PATH "./log.txt"
 #define PASS "SecretPassword"
-#define CONTROLLER_VERSION 128 //128-255
-#define VICTIM_VERSION 129 //128-255
+#define CONTROLLER_PASS "c0.2.6"
+#define VICTIM_PASS 129 "v0.3.1"
 ```
  - You are all set and ready to build the project!
 

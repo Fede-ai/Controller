@@ -18,14 +18,16 @@ public:
 	void controlWindow();
 
 private:
-	void receiveInfo();
-	void takeCmdInput();
-	void connectServer();
-	void displayList();
-	void startSendingFile();
-	sf::Socket::Status sendServer(sf::Packet& p);
+	void receiveInfo(); //thread
+	void takeCmdInput(); //thread
 
-	std::vector<Client> controllers, victims, cTemp, vTemp;
+	void connectServer();
+	void updateClientsList(sf::Packet& p);
+	static std::string getHardwareId();
+
+	void startSendingFile(); //optional thread
+
+	std::vector<Client> controllers, victims;
 	bool isRunning = true, isConnected = false, isPaired = false, isControlling = false;
 	bool areSettingsOpen = false, sendKeys = false, sendMouse = false, sharingScreen = false;
 
@@ -33,14 +35,12 @@ private:
 	sf::RenderWindow w;
 	const std::string ip = sf::IpAddress::getPublicAddress().toString();
 	sf::Uint16 id = 0;
+	std::string hardwareId = "";
 
 	Mlib::Vec2i lastMousePos = Mlib::Mouse::getPos();
 	size_t lastAwakeSignal = Mlib::currentTime().asMil();
 	
-	std::string name = "";
 	sf::Font font;
-	sf::Mutex mutex;
-
 	sf::Texture wallpaper;
 	sf::Texture screen;
 

