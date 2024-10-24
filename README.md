@@ -30,7 +30,7 @@ you will need to adjust the paths from the projects' settings
 	- `LOG_FILE` => a string that tells the server where to write the logs (must also include file name and extension)
 	- `PASS` => a string containing the password that controllers can use to access admin commands
 	- `CONTROLLER_PASS` & `VICTIM_PASS` => two strings (shouldn't be the same) that allow client applications to verify themselves to the server.
-They are primarly using during development (so that older versions of the client aren't allowed access to the server)
+They are primarly used during development (so that older versions of the client aren't allowed access to the server)
  - Here is an example of what a `secret.h` file might look like:
 ```C++
 #define SERVER_IP "123.123.123.123"
@@ -38,7 +38,7 @@ They are primarly using during development (so that older versions of the client
 #define LOG_PATH "./log.txt"
 #define PASS "SecretPassword"
 #define CONTROLLER_PASS "c0.2.6"
-#define VICTIM_PASS 129 "v0.3.1"
+#define VICTIM_PASS "v0.3.1"
 ```
  - You are all set and ready to build the project!
 
