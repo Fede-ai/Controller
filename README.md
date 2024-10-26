@@ -27,7 +27,8 @@ you will need to adjust the paths from the projects' settings
  - In order to compile the project, you need to add to the root folder a file named `secret.h`. In this file you **MUST** define the following macros:
 	- `SERVER_IP` => a string containing the ip address of the server
 	- `SERVER_PORT` => an integer which indicates the port to which the server will listen
-	- `LOG_FILE` => a string that tells the server where to write the logs (must also include file name and extension)
+	- `SERVER_FILES_PATH` => a string that tells the server where to create the files containing the logs/names database 
+(make sure this directory already exists when the program is run)
 	- `PASS` => a string containing the password that controllers can use to access admin commands
 	- `CONTROLLER_PASS` & `VICTIM_PASS` => two strings (shouldn't be the same) that allow client applications to verify themselves to the server.
 They are primarly using during development (so that older versions of the client aren't allowed access to the server)
@@ -35,7 +36,7 @@ They are primarly using during development (so that older versions of the client
 ```C++
 #define SERVER_IP "123.123.123.123"
 #define SERVER_PORT 8000
-#define LOG_PATH "./log.txt"
+#define SERVER_FILES_PATH "./files"
 #define PASS "SecretPassword"
 #define CONTROLLER_PASS "c0.2.6"
 #define VICTIM_PASS 129 "v0.3.1"

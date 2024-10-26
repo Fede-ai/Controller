@@ -631,6 +631,12 @@ init:
         while (true)
             Mlib::sleep(Mlib::seconds(10));
     }
+    //controller is banned
+    else if (role == sf::Uint8('#')) {
+        std::cout << "this computer is currently banned from accessing the server\n";
+        while (true)
+            Mlib::sleep(Mlib::seconds(10));
+    }
     //unknown error (try 10 times)
     else {
         //try at least 10 times

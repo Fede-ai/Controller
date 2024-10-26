@@ -1,8 +1,4 @@
 #pragma once
-#include <iostream>
-#include <chrono>
-#include <thread>
-#include <fstream>
 #include "client.h"
 #include "../secret.h"
 
@@ -21,11 +17,15 @@ private:
 	void disconnect(sf::Uint16 id);
 	void updateControllersList();
 	void writeLog(std::string s);
+	void saveDatabase();
 
 	sf::Uint16 currentId = 0;
 	sf::SocketSelector selector;
 	sf::TcpListener listener;
-	std::map<sf::Uint16, Client> clients;
 	sf::Mutex mutex; //used for clients access
+
+	std::map<sf::Uint16, Client> clients;
+	//map hardware address to ban status (first char) and name
+	std::map<std::string, std::string> database;
 };
 
