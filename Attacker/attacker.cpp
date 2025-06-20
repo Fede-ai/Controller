@@ -228,7 +228,6 @@ void Attacker::connectServer(std::stringstream& ss, bool pw)
 		return;
 	}
 	serverIp = ip.value();
-	isInitialized = false;
 
 	//connect to the server
 	if (server.connect(serverIp, port) != sf::Socket::Status::Done) {

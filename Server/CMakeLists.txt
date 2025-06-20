@@ -3,7 +3,7 @@ project(Server)
 set(SOURCE
 	main.cpp
 	server.hpp
-	server.hpp
+	server.cpp
 )
 
 add_executable(Server ${SOURCE})

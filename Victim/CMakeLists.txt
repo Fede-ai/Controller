@@ -2,15 +2,17 @@ project(Victim)
 
 set(SOURCE
 	main.cpp
+	victim.hpp
+	victim.cpp
 )
 
-add_executable(Victim ${SOURCE})
+add_executable(Victim  ${SOURCE})
 
 target_include_directories(Victim PRIVATE ${PATH_SFML}/include)
 target_link_directories(Victim PRIVATE ${PATH_SFML}/lib)
 target_link_libraries(Victim PRIVATE
-	$<$<CONFIG:Release>:sfml-system.lib sfml-network.lib>
-	$<$<CONFIG:Debug>:sfml-system-d.lib sfml-network-d.lib>
+	$<$<CONFIG:Release>:sfml-system.lib sfml-network.lib sfml-main-s.lib>
+	$<$<CONFIG:Debug>:sfml-system-d.lib sfml-network-d.lib sfml-main-s-d.lib>
 )
 
 # copy necessary dll files

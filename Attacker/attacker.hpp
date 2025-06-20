@@ -1,5 +1,4 @@
 #include <SFML/Network.hpp>
-#include <SFML/System.hpp>
 #include <thread>
 #include <iostream>
 
@@ -50,6 +49,6 @@ private:
 
 	//does the server know about your existance?
 	bool isInitialized = false;
-	//do you have admin privileges
+	//do you have admin privileges?
 	bool isAdmin = false;
 };
