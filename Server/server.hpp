@@ -1,9 +1,10 @@
 #include <SFML/Network.hpp>
+#include <iostream> 
 
 struct Client {
 	sf::TcpSocket* socket = nullptr;
 	bool isAttacker = false, isAdmin = false;
-	uint16_t id = 0;
+	uint16_t sshId = 0;
 	std::string hId = "";
 };
 
@@ -23,6 +24,7 @@ private:
 		using namespace std::chrono;
 		return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 	}
+	void disconnectClient(uint16_t id);
 
 	sf::TcpListener listener;
 	sf::SocketSelector selector;
@@ -31,6 +33,6 @@ private:
 	const std::string adminPass = "testpass";
 	uint16_t nextId = 1;
 
-	std::vector<Client> clients;
-	std::vector<Client> uninitialized;
+	std::map<uint16_t, Client> clients;
+	std::map<uint16_t, Client> uninitialized;
 };

