@@ -13,15 +13,15 @@ private:
 
 	void connectServer(std::stringstream& ss, bool pw);
 
-	bool handleCmd(std::string& s);
+	bool handleCmd(const std::string& s);
 	void handlePacket(sf::Packet& p);
 	void updateList(sf::Packet& p);
 
-	inline void printErr(std::string e) {
+	inline void printErr(const std::string& e) {
 		std::cerr << "\033[31m" << e << "\033[0m";
 		consoleMemory << "\033[31m" << e << "\033[0m";
 	}
-	inline void printMsg(std::string s) {
+	inline void printMsg(const std::string& s) {
 		std::cout << s;
 		consoleMemory << s;
 	}
@@ -43,7 +43,8 @@ private:
 		KILL = 8,			//admin
 		START_SSH = 9,
 		END_SSH = 10,
-		SSH_DATA = 11
+		SSH_DATA = 11,
+		SAVE_DATASET = 12	//admin
 	};
 	uint16_t requestId = 1;
 	//response id has been stripped

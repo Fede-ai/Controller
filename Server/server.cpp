@@ -1,10 +1,12 @@
 #include "server.hpp"
-#include <iostream>
 #include <exception>
 #include <set>
+#include <fstream>
 
 Server::Server()
 {
+	outputLog("loaded " + std::to_string(loadDatabase()) + " hId datapoint(s) from file");
+
 	if (listener.listen(443) != sf::Socket::Status::Done)
 		std::exit(-1);
 	selector.add(listener);
@@ -12,12 +14,12 @@ Server::Server()
 	try {
 		const auto& pub = sf::IpAddress::getPublicAddress();
 		const auto& priv = sf::IpAddress::getLocalAddress();
-		const auto& port = listener.getLocalPort();
-		std::cout << getTime() << " - listening on port " << port << " (" << 
-			priv.value().toString() << " / " << pub.value().toString() << ")\n";
+		const auto& port = std::to_string(listener.getLocalPort());
+		outputLog("listening on port " + port + " (" + 
+			priv.value().toString() + " / " + pub.value().toString() + ")");
 	}
 	catch (std::exception& e) {
-		std::cout << e.what() << "\n";
+		outputLog(e.what());
 		std::exit(-2);
 	}
 }
@@ -39,8 +41,9 @@ int Server::processIncoming()
 			uninitialized[id] = c;
 			selector.add(*c.socket);
 		
-			std::cout << getTime() << " - new connection (" << id << ") = " <<
-				c.socket->getRemoteAddress().value() << ":" << c.socket->getRemotePort() << "\n";
+			outputLog("new connection (" + std::to_string(id) + ") = " +
+				c.socket->getRemoteAddress().value().toString() + ":" + 
+				std::to_string(c.socket->getRemotePort()));
 		}
 		//failed to accept client 
 		else
@@ -58,7 +61,7 @@ int Server::processIncoming()
 		auto status = u.socket->receive(p);
 		//forget disconnected client
 		if (status == sf::Socket::Status::Disconnected) {
-			std::cout << getTime() << " - uninitialized client disconnected (" << id << ")\n";
+			outputLog("uninitialized client disconnected (" + std::to_string(id) + ")");
 
 			selector.remove(*uninitialized[id].socket);
 			delete uninitialized[id].socket;
@@ -92,7 +95,7 @@ int Server::processIncoming()
 
 				idsToRemove.insert(id);
 
-				std::cout << getTime() << " - " << id << " = admin: " << hId << "\n";
+				outputLog(std::to_string(id) + " = admin: " + hId);
 				sendClientList();
 			}
 			//password is not correct
@@ -104,7 +107,8 @@ int Server::processIncoming()
 				selector.remove(*u.socket);
 				delete u.socket;
 
-				std::cout << getTime() << " - failed admin login (" << id << ")\n";
+
+				outputLog("failed admin login (" + std::to_string(id) + ")");
 				idsToRemove.insert(id);
 			}
 		}
@@ -124,7 +128,7 @@ int Server::processIncoming()
 				selector.remove(*u.socket);
 				delete u.socket;
 
-				std::cout << getTime() << " - banned client (" << id << "): " << hId << "\n";
+				outputLog("banned client (" + std::to_string(id) + "): " + hId);
 				idsToRemove.insert(id);
 			}
 			//access granted
@@ -139,7 +143,7 @@ int Server::processIncoming()
 
 				clients[id] = u;
 
-				std::cout << getTime() << " - " << id << " = attacker: " << hId << "\n";
+				outputLog(std::to_string(id) + " = attacker: " + hId);
 				sendClientList();
 			}
 		}
@@ -160,7 +164,7 @@ int Server::processIncoming()
 
 			clients[id] = u;
 
-			std::cout << getTime() << " - " << id << " = victim: " << hId << "\n";
+			outputLog(std::to_string(id) + " = victim: " + hId);
 			sendClientList();
 		}
 	}
@@ -181,7 +185,7 @@ int Server::processIncoming()
 		auto status = c.socket->receive(p);
 		//forget disconnected client
 		if (status == sf::Socket::Status::Disconnected) {
-			std::cout << getTime() << " - client disconnected (" << id << ")\n";
+			outputLog("client disconnected (" + std::to_string(id) + ")");
 			idsToDisconnect.insert(id);
 			continue;
 		}
@@ -263,7 +267,7 @@ int Server::processIncoming()
 			p >> id;
 
 			if (c.isAdmin && clients.find(id) != clients.end() && !clients[id].isAdmin) {
-				std::cout << getTime() << " - client killed (" << id << ")\n";
+				outputLog("client killed (" + std::to_string(id) + ")");
 				idsToDisconnect.insert(id);
 			}
 		}
@@ -306,8 +310,21 @@ int Server::processIncoming()
 				_ = clients[oId].socket->send(res);
 			}
 		}
-		else
-			std::cout << getTime() << " - unknown command (" << id << "): " << int(cmd) << "\n";
+		//save database to file
+		else if (cmd == uint8_t(12)) {
+			if (!c.isAdmin)
+				continue;
+
+			saveDatabase();
+			sf::Packet res;
+			res << reqId;
+			auto _ = c.socket->send(res);
+		}
+		//unkown command
+		else {
+			outputLog("unknown command (" + std::to_string(id)
+				+ "): " + std::to_string(int(cmd)));
+		}
 	}
 
 	//add banned clients to the kill list
@@ -315,7 +332,7 @@ int Server::processIncoming()
 		for (auto& [id, c] : clients) {
 			//check if client needs to be killed
 			if (c.hId == hId && c.isAttacker && !c.isAdmin) {
-				std::cout << getTime() << " - attacker banned (" << id << ")\n";
+				outputLog("attacker banned (" + std::to_string(id) + ")");
 				idsToDisconnect.insert(id);
 			}
 		}
@@ -329,7 +346,7 @@ int Server::processIncoming()
 	return 0;
 }
 
-void Server::sendClientList()
+void Server::sendClientList() const
 {
 	sf::Packet admPacket, attPacket;
 	admPacket << uint16_t(0) << uint8_t(4) << uint16_t(database.size());
@@ -360,7 +377,7 @@ void Server::sendClientList()
 void Server::disconnectClient(uint16_t id)
 {
 	if (clients.find(id) == clients.end()) {
-		std::cout << getTime() << " - disconnectClient: client not found (" << id << ")\n";
+		outputLog("disconnectClient: client not found (" + std::to_string(id) + ")");
 		return;
 	}
 
@@ -376,4 +393,39 @@ void Server::disconnectClient(uint16_t id)
 	delete clients[id].socket;
 
 	clients.erase(id);
+}
+
+int Server::loadDatabase()
+{
+	int num = 0;
+	std::ifstream file(databasePath);
+
+	std::string line = "";
+	while (getline(file, line)) {
+		if (line.find(',') == std::string::npos)
+			continue;
+
+		HIdInfo hIdInfo;
+		std::string hId = line.substr(0, line.find_first_of(','));
+		line = line.substr(line.find_first_of(',') + 1);
+		hIdInfo.name = line.substr(0, line.find_first_of(','));
+		line = line.substr(line.find_first_of(',') + 1);
+		std::istringstream(line) >> hIdInfo.isBanned;
+
+		database[hId] = hIdInfo;
+		num++;
+	}
+	file.close();
+
+	return num;
+}
+
+void Server::saveDatabase() const
+{
+	std::ofstream file(databasePath, std::ios::trunc);
+	
+	for (auto& [hId, info] : database)
+		file << hId << "," << info.name << "," << info.isBanned << "\n";
+	
+	file.close();
 }

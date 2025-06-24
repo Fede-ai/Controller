@@ -156,6 +156,9 @@ void Attacker::connectServer(std::stringstream& ss, bool pw)
 	isSshActive = false;
 	server.disconnect();
 
+	system("cls");
+	std::cout << consoleMemory.str();
+
 	std::string ipStr;
 	short port = 0;
 	ss >> ipStr >> port;
@@ -225,7 +228,7 @@ void Attacker::connectServer(std::stringstream& ss, bool pw)
 	}
 
 	//wait for initialization response and output progress
-	printMsg("waiting for initialization: [");
+	printMsg("waiting for response: [");
 	for (int i = 0; i < 10; i++) {
 		if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
 			sf::sleep(sf::milliseconds(500));
@@ -267,7 +270,7 @@ void Attacker::connectServer(std::stringstream& ss, bool pw)
 		printMsg("initialized (" + std::to_string(myId) + ")\n");
 }
 
-bool Attacker::handleCmd(std::string& s)
+bool Attacker::handleCmd(const std::string& s)
 {
 	std::stringstream ss(s);
 	std::string cmd;
@@ -403,7 +406,7 @@ bool Attacker::handleCmd(std::string& s)
 		if (server.send(req) != sf::Socket::Status::Done)
 			printErr("failed to send request to server\n");
 
-		printMsg("waiting for ssh: [");
+		printMsg("waiting for response: [");
 		for (int i = 0; i < 10; i++) {
 			if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
 				printMsg("*");
@@ -415,7 +418,7 @@ bool Attacker::handleCmd(std::string& s)
 		printMsg("] - ");
 
 		if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
-			printErr("ssh request timed out\n");
+			printErr("timed out\n");
 			break;
 		}
 
@@ -441,6 +444,42 @@ bool Attacker::handleCmd(std::string& s)
 
 		break;
 	}
+	case hash("save"): {
+		if (!isInitialized) {
+			printErr("client is not initialized\n");
+			break;
+		}
+		else if (!isAdmin) {
+			printErr("admin privileges are needed\n");
+			break;
+		}
+
+		sf::Packet req;
+		uint16_t reqId = requestId++;
+		req << uint16_t(reqId) << uint8_t(Cmd::SAVE_DATASET);
+		if (server.send(req) != sf::Socket::Status::Done)
+			printErr("failed to send request to server\n");
+
+		printMsg("waiting for response: [");
+		for (int i = 0; i < 10; i++) {
+			if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
+				printMsg("*");
+				sf::sleep(sf::milliseconds(500));
+			}
+			else
+				printMsg(".");
+		}
+		printMsg("] - ");
+
+		if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
+			printErr("request timed out\n");
+			break;
+		}
+		else
+			printMsg("saved database\n");
+
+		break;
+	}
 	case hash(""): break;
 	default: {
 		printErr("enter a valid command\n");
@@ -463,7 +502,7 @@ void Attacker::handlePacket(sf::Packet& p)
 		updateList(p);
 	else if (cmd == uint8_t(Cmd::END_SSH)) {
 		isSshActive = false;
-		printMsg("\033[32m" + myHId + "> \033[0m");
+		printMsg("\n\033[32m" + myHId + "> \033[0m");
 	}
 	else if (cmd == uint8_t(Cmd::SSH_DATA)) {
 		if (!isSshActive)

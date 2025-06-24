@@ -19,18 +19,24 @@ public:
 	int processIncoming();
 
 private:
-	void sendClientList();
-	inline static size_t getTime() {
+	inline void outputLog(std::string s) const {		
 		using namespace std::chrono;
-		return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+		auto t = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+		std::cout << t << " - " << s << "\n";
 	}
+
+	void sendClientList() const;
 	void disconnectClient(uint16_t id);
+	int loadDatabase();
+	void saveDatabase() const;
 
 	sf::TcpListener listener;
 	sf::SocketSelector selector;
 
 	std::map<std::string, HIdInfo> database;
 	const std::string adminPass = "testpass";
+	const std::string databasePath = "./dataset.txt";
+	//const std::string logPath = "./log.log";
 	uint16_t nextId = 1;
 
 	std::map<uint16_t, Client> clients;
