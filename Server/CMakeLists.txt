@@ -1,9 +1,8 @@
-project(Server)
-
 set(SOURCE
 	main.cpp
 	server.hpp
 	server.cpp
+	../commands.hpp
 )
 
 add_executable(Server ${SOURCE})

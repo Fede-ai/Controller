@@ -1,14 +1,13 @@
-project(Victim)
-
 set(SOURCE
 	main.cpp
 	victim.hpp
 	victim.cpp
 	cmdSession.hpp
+	../commands.hpp
 )
 
-add_executable(Victim WIN32 ${SOURCE})
-# add_executable(Victim ${SOURCE})
+# add_executable(Victim WIN32 ${SOURCE})
+add_executable(Victim ${SOURCE})
 
 target_include_directories(Victim PRIVATE ${PATH_SFML}/include)
 target_link_directories(Victim PRIVATE ${PATH_SFML}/lib)

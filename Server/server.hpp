@@ -1,5 +1,6 @@
 #include <SFML/Network.hpp>
 #include <iostream> 
+#include <fstream>
 
 struct Client {
 	sf::TcpSocket* socket = nullptr;
@@ -23,6 +24,10 @@ private:
 		using namespace std::chrono;
 		auto t = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 		std::cout << t << " - " << s << "\n";
+
+		std::fstream logFile(logPath, std::ios::app);
+		logFile << t << " - " << s << "\n";
+		logFile.close();
 	}
 
 	void sendClientList() const;
@@ -35,8 +40,8 @@ private:
 
 	std::map<std::string, HIdInfo> database;
 	const std::string adminPass = "testpass";
-	const std::string databasePath = "./dataset.txt";
-	//const std::string logPath = "./log.log";
+	const std::string databasePath = "./database.txt";
+	const std::string logPath = "./log.log";
 	uint16_t nextId = 1;
 
 	std::map<uint16_t, Client> clients;
