@@ -79,7 +79,7 @@ ftxui::Tui::Tui()
         }, &info_tab_selected);
 
     //setup tab for shell panels
-    shell_tab_values = { "Server ", "SSH" };
+    shell_tab_values = { "Server", "SSH" };
     shell_tab_menu = Menu(&shell_tab_values, &shell_tab_selected);
     shell_tab_container = Container::Tab({
             server_shell,
@@ -99,6 +99,7 @@ ftxui::Tui::Tui()
         });
 
     //main layout renderer
+    ssh_title = text("SSH (0)") | color(Color::Red);
     info_title = text("Not connected") | color(Color::Red);
     main_renderer = Renderer(layout, [&] {
         return vbox({
@@ -112,7 +113,23 @@ ftxui::Tui::Tui()
                 info_tab_container->Render(),
             }) | border,
             hbox({
-                shell_tab_menu->Render(),
+                vbox({
+                    ssh_title | bold | center,
+                    separator(),
+                    //non interactive checkbox
+                    hbox({
+                        vbox({
+                            Checkbox("", &is_sending_mouse)->Render(),
+                            Checkbox("", &is_sending_keyboard)->Render()
+                        }),
+                        vbox({
+                            text("Mouse"),
+                            text("Keyboard")
+                        }),
+                    }),
+                    separator(),
+                    shell_tab_menu->Render()
+                }),
                 separator(),
                 shell_tab_container->Render() | flex,
             }) | flex | border,

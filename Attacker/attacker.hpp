@@ -31,10 +31,13 @@ private:
 	ftxui::Tui& tui;
 	std::string myHId = "";
 	int16_t myId = 0;
+	int fps = 10;
 
 	//does the server know about your existance?
 	bool isInitialized = false;
 	//do you have admin privileges?
 	bool isAdmin = false;
+
 	bool isSshActive = false;
+	bool &isSendingMouse, &isSendingKeyboard;
 };

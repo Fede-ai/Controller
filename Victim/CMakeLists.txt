@@ -2,7 +2,6 @@ set(SOURCE
 	main.cpp
 	victim.hpp
 	victim.cpp
-	cmdSession.hpp
 	../commands.hpp
 )
 

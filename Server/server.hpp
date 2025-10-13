@@ -1,6 +1,7 @@
 #include <SFML/Network.hpp>
 #include <iostream> 
 #include <fstream>
+#include <set>
 
 struct Client {
 	sf::TcpSocket* socket = nullptr;
@@ -29,6 +30,9 @@ private:
 		logFile << t << " - " << s << "\n";
 		logFile.close();
 	}
+
+	uint8_t processPacket(sf::Packet& p, Client& c, const uint16_t& id,
+		std::set<std::string>& bannedHIds, std::set<uint16_t>& idsToDisconnect);
 
 	void sendClientList() const;
 	void disconnectClient(uint16_t id);

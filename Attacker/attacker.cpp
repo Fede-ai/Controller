@@ -12,7 +12,9 @@ static constexpr uint32_t hash(const std::string s) noexcept {
 Attacker::Attacker(std::string inHId, ftxui::Tui& inTui)
 	:
 	myHId(inHId),
-	tui(inTui)
+	tui(inTui),
+	isSendingMouse(inTui.is_sending_mouse),
+	isSendingKeyboard(inTui.is_sending_keyboard)
 {
 	receiveTcpThread = new std::thread([this]() {
 		while (true)
@@ -50,9 +52,12 @@ int Attacker::update()
 				auto _ = server.send(req);
 
 				isSshActive = false;
+				isSendingMouse = false;
+				isSendingKeyboard = false;
 
+				tui.ssh_title = ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red);
 				tui.ssh_commands = std::queue<std::string>();
-				tui.printSshShell("\n \n ");
+				tui.printSshShell("\n \n");
 			}
 			//send ssh data
 			else {
@@ -72,10 +77,23 @@ int Attacker::update()
 		packetsToProcess.erase(packetsToProcess.begin());
 	}
 
-	//set to ~10 fps
+	if (isSendingMouse) {
+		sf::Packet p;
+		p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE);
+
+		server.send(p);
+	}
+	if (isSendingKeyboard) {
+		sf::Packet p;
+		p << uint16_t(0) << uint8_t(Cmd::SSH_KEYBOARD);
+
+		server.send(p);
+	}
+
+	//set fps limit
 	auto passed = clock.getElapsedTime().asMicroseconds();
-	if (passed < 100'000) 
-		sf::sleep(sf::microseconds(100'000 - passed));
+	if (passed < 1'000'000 / fps) 
+		sf::sleep(sf::microseconds(1'000'000 / fps - passed));
 
 	return 0;
 }
@@ -90,11 +108,15 @@ void Attacker::receiveTcp()
 		if (isInitialized) {
 			isInitialized = false;
 			isAdmin = false;
+
 			isSshActive = false;
+			isSendingMouse = false;
+			isSendingKeyboard = false;
 
 			tui.clients_overview_output = "Server connection required";
 			tui.server_database_output = "Server connection and admin privileges required";
 			tui.info_title = ftxui::text("Not connected") | ftxui::color(ftxui::Color::Red);
+			tui.ssh_title = ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red);
 			tui.triggerRedraw();
 		}
 		sf::sleep(sf::milliseconds(100));
@@ -117,12 +139,16 @@ void Attacker::connectServer(std::stringstream& ss, bool pw)
 {
 	isInitialized = false;
 	isAdmin = false;
+
 	isSshActive = false;
+	isSendingMouse = false;
+	isSendingKeyboard = false;
 	server.disconnect();
 
 	tui.clients_overview_output = "Server connection required";
 	tui.server_database_output = "Server connection and admin privileges required";
 	tui.info_title = ftxui::text("Not connected") | ftxui::color(ftxui::Color::Red);
+	tui.ssh_title = ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red);
 	tui.triggerRedraw();
 
 	std::string ipStr;
@@ -402,10 +428,10 @@ bool Attacker::handleCmd(const std::string& s)
 		res >> code;
 		if (code == 1) {
 			tui.ssh_shell_output = "";
-			tui.shell_tab_selected = 1;
-
-			tui.printServerShell("loading ssh session...\n");
 			isSshActive = true;
+
+			tui.ssh_title = ftxui::text("SSH (" + std::to_string(oId) + ")") | ftxui::color(ftxui::Color::Green);
+			tui.printServerShell("loading ssh session...\n");
 		}
 		else if (code == 2)
 			tui.printServerShell("ssh session already active\n");
@@ -454,6 +480,26 @@ bool Attacker::handleCmd(const std::string& s)
 
 		break;
 	}
+	case hash("togglemouse"): {
+		if (isSshActive) {
+			isSendingMouse = !isSendingMouse;
+			tui.triggerRedraw();
+		}
+		else
+			tui.printServerShell("ssh must be active\n");
+
+		break;
+	}
+	case hash("togglekeyboard"): {
+		if (isSshActive) {
+			isSendingKeyboard = !isSendingKeyboard;
+			tui.triggerRedraw();
+		}
+		else
+			tui.printServerShell("ssh must be active\n");
+
+		break;
+	}
 	case hash(""): break;
 	default: {
 		tui.printServerShell("enter a valid command\n");
@@ -473,6 +519,10 @@ void Attacker::handlePacket(sf::Packet& p)
 		updateList(p);
 	else if (cmd == uint8_t(Cmd::END_SSH)) {
 		isSshActive = false;
+		isSendingMouse = false;
+		isSendingKeyboard = false;
+
+		tui.ssh_title = ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red);
 		tui.triggerRedraw();
 	}
 	else if (cmd == uint8_t(Cmd::SSH_DATA)) {
