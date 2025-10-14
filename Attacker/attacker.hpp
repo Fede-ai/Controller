@@ -19,6 +19,9 @@ private:
 	void handlePacket(sf::Packet& p);
 	void updateList(sf::Packet& p);
 
+	static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam);
+	static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);
+
 	std::thread* receiveTcpThread = nullptr;
 	sf::TcpSocket server;
 	sf::IpAddress serverIp = sf::IpAddress(0, 0, 0, 0);
@@ -40,4 +43,7 @@ private:
 
 	bool isSshActive = false;
 	bool &isSendingMouse, &isSendingKeyboard;
+
+	sf::Vector2f lastMousePos;
+	static Attacker* attacker;
 };

