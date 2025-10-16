@@ -13,7 +13,7 @@ public:
 private:
 	void receiveTcp();
 
-	void connectServer(std::stringstream& ss, bool pw);
+	void connectServer(bool pw, std::string ipStr, short port);
 
 	bool handleCmd(const std::string& s);
 	void handlePacket(sf::Packet& p);

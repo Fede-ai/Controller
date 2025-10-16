@@ -4,12 +4,20 @@
 
 ### Attacker CMDs
 ```
+- help
 - exit
 - clear
-- connect [server ip] [port]
-- adminconnect [server ip] [port]
+- togglemouse
+- togglekeyboard
+
+- connect [ip] [port]
+- connect [port]
+- adminconnect [ip] [port]
+- adminconnect [ip] [port]
 - name [hardware id] [name]
 - ban [hardware id]
 - unban [hardware id]
+- save
 - kill [client id]
+- ssh [client id]
 ```

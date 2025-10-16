@@ -18,7 +18,7 @@ ftxui::Tui::Tui()
     server_scroller = Scroller(Renderer([&] {
         return paragraph(server_shell_output);
         }));
-    server_shell = Renderer(Container::Vertical({ server_input, server_scroller }), [&] {
+    server_shell = Renderer(Container::Vertical({ server_scroller, server_input }), [&] {
         return vbox({
             server_scroller->Render(),
             separator(),
@@ -32,7 +32,7 @@ ftxui::Tui::Tui()
     ssh_scroller = Scroller(Renderer([&] {
         return paragraph(ssh_shell_output);
         }));
-    ssh_shell = Renderer(Container::Vertical({ ssh_input, ssh_scroller }), [&] {
+    ssh_shell = Renderer(Container::Vertical({ ssh_scroller, ssh_input }), [&] {
         return vbox({
             ssh_scroller->Render(),
             separator(),
