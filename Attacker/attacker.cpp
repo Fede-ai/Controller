@@ -648,6 +648,20 @@ LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lP
 			_ = attacker->server.send(p);
 
 			break;
+		case WM_XBUTTONDOWN: {
+			int which = HIWORD(par->mouseData);
+			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_PRESS) << uint8_t(3 + which);
+			_ = attacker->server.send(p);
+
+			break;
+		}
+		case WM_XBUTTONUP: {
+			int which = HIWORD(par->mouseData);			
+			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_RELEASE) << uint8_t(3 + which);
+			_ = attacker->server.send(p);
+
+			break;
+		}
 		case WM_MOUSEWHEEL:
 		{
 			int delta = GET_WHEEL_DELTA_WPARAM(par->mouseData);
