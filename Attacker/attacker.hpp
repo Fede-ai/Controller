@@ -42,7 +42,8 @@ private:
 	bool isAdmin = false;
 
 	bool isSshActive = false;
-	bool &isSendingMouse, &isSendingKeyboard;
+	bool isSendingMouse = false;
+	bool isSendingKeyboard = false;
 
 	sf::Vector2f lastMousePos;
 	static Attacker* attacker;

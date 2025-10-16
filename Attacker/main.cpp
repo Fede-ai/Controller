@@ -121,24 +121,22 @@ int main() {
 	std::atomic_bool has_tui_stopped = false;
     ftxui::Tui tui;
 
-    auto priv = sf::IpAddress::getLocalAddress().value_or(sf::IpAddress::Any).toString();
-    auto publ = sf::IpAddress::getPublicAddress().value_or(sf::IpAddress::Any).toString();
-    tui.setTitle(" " + hId + " - " + priv + " / " + publ);
-
     std::thread tui_thread([&tui, &has_tui_stopped] {
         tui.run();
 		has_tui_stopped.store(true);
         });
 
+    sf::sleep(sf::seconds(0.1));
+    
     Attacker attacker(hId, tui);
     int status = 0;
     while (status == 0) {
         if (has_tui_stopped.load())
 			break;
-
+    
         status = attacker.update(); 
     }
-
+    
     tui.stop();
 	tui_thread.join();
 
