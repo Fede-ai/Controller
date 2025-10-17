@@ -3,6 +3,7 @@
 
 #include <exception>
 #include <fstream>
+#include <sstream>
 
 Server::Server()
 {

@@ -91,24 +91,6 @@ int Attacker::update()
 		packetsToProcess.erase(packetsToProcess.begin());
 	}
 
-	//send mouse position
-	//other events are handled on a different thread
-	if (isSendingMouse && !sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Insert)) {
-		auto size = sf::Vector2f(sf::VideoMode::getDesktopMode().size);
-		auto pos = sf::Vector2f(sf::Mouse::getPosition()).componentWiseDiv(size);
-
-		if (pos != lastMousePos) {
-			lastMousePos = pos;
-			pos.x = std::min(std::max(pos.x, 0.f), 1.f) * (UINT16_MAX - 1);
-			pos.y = std::min(std::max(pos.y, 0.f), 1.f) * (UINT16_MAX - 1);
-
-			sf::Packet p;
-			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_POS);
-			p << uint16_t(std::round(pos.x)) << uint16_t(std::round(pos.y));
-			auto _ = server.send(p);
-		}
-	}
-
 	//set fps limit
 	auto passed = clock.getElapsedTime().asMicroseconds();
 	if (passed < 1'000'000 / fps) 
@@ -704,11 +686,22 @@ LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lP
 			break;
 		}
 		case WM_MOUSEWHEEL: {
-			int delta = GET_WHEEL_DELTA_WPARAM(par->mouseData);
+			int delta = HIWORD(par->mouseData);
 			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_SCROLL) << int16_t(delta);
 			_ = attacker->server.send(p);
 
 			break;
+		}
+		case WM_MOUSEMOVE: {
+			auto size = sf::Vector2f(sf::VideoMode::getDesktopMode().size);
+			auto pos = sf::Vector2f(LOWORD(lParam), HIWORD(lParam)).componentWiseDiv(size);
+
+			int x = std::round(std::min(std::max(pos.x, 0.f), 1.f) * (UINT16_MAX - 1));
+			int y = std::round(std::min(std::max(pos.y, 0.f), 1.f) * (UINT16_MAX - 1));
+
+			sf::Packet p;
+			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_POS) << uint16_t(x) << uint16_t(y);
+			auto _ = attacker->server.send(p);
 		}
 		}
 	}

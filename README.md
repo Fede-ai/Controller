@@ -11,9 +11,9 @@
 - togglekeyboard
 
 - connect [ip] [port]
-- connect [port]
+- connect [ip]
 - adminconnect [ip] [port]
-- adminconnect [ip] [port]
+- adminconnect [ip]
 - name [hardware id] [name]
 - ban [hardware id]
 - unban [hardware id]

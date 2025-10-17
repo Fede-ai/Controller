@@ -1,7 +1,9 @@
 #include <SFML/Network.hpp>
 #include <iostream> 
 #include <fstream>
+#include <cstdint>
 #include <set>
+#include <chrono>
 
 struct Client {
 	sf::TcpSocket* socket = nullptr;

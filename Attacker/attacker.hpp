@@ -34,7 +34,7 @@ private:
 	ftxui::Tui& tui;
 	std::string myHId = "";
 	int16_t myId = 0;
-	int fps = 10;
+	int fps = 8;
 
 	//does the server know about your existance?
 	bool isInitialized = false;
@@ -45,6 +45,5 @@ private:
 	bool isSendingMouse = false;
 	bool isSendingKeyboard = false;
 
-	sf::Vector2f lastMousePos;
 	static Attacker* attacker;
 };
