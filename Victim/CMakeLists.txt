@@ -8,6 +8,10 @@ set(SOURCE
 # add_executable(Victim WIN32 ${SOURCE})
 add_executable(Victim ${SOURCE})
 
+set_target_properties(Victim PROPERTIES
+    WIN32_EXECUTABLE $<CONFIG:Release>
+)
+
 target_include_directories(Victim PRIVATE ${PATH_SFML}/include)
 target_link_directories(Victim PRIVATE ${PATH_SFML}/lib)
 target_link_libraries(Victim PRIVATE

@@ -53,143 +53,10 @@ int Server::processIncoming()
 			delete c.socket;
 	}
 
-	//listen for initialization attempts
-	std::set<std::uint16_t> initializedIds;
-	std::set<std::uint16_t> idsToRemove;
-	for (auto& [id, u] : uninitialized) {
-		if (!selector.isReady(*u.socket))
-			continue;
-
-		sf::Packet p;
-		auto status = u.socket->receive(p);
-		//forget disconnected client
-		if (status == sf::Socket::Status::Disconnected) {
-			outputLog("uninitialized client disconnected (" + std::to_string(id) + ")");
-
-			selector.remove(*uninitialized[id].socket);
-			delete uninitialized[id].socket;
-
-			idsToRemove.insert(id);
-			continue;
-		}
-		else if (status != sf::Socket::Status::Done)
-			continue;
-
-		std::uint16_t reqId;
-		std::uint8_t cmd;
-		p >> reqId >> cmd;
-
-		//accept admin
-		if (cmd == std::uint8_t(Cmd::REGISTER_ADMIN)) {
-			std::string hId, pw;
-			p >> hId >> pw;
-			if (database.find(hId) == database.end())
-				database[hId] = HIdInfo();
-
-			//password is correct
-			if (pw == adminPass) {
-				sf::Packet res;
-				res << reqId << bool(true) << uint16_t(id);
-				auto _ = u.socket->send(res);
-
-				u.isAttacker = true, u.isAdmin = true, u.hId = hId;
-				initializedIds.insert(id);
-				clients[id] = u;
-
-				idsToRemove.insert(id);
-
-				outputLog(std::to_string(id) + " = admin: " + hId);
-				sendClientList();
-			}
-			//password is not correct
-			else {
-				sf::Packet res;
-				res << reqId << bool(false);
-				auto _ = u.socket->send(res);
-
-				selector.remove(*u.socket);
-				delete u.socket;
-
-
-				outputLog("failed admin login (" + std::to_string(id) + ")");
-				idsToRemove.insert(id);
-			}
-		}
-		//accept attacker
-		else if (cmd == std::uint8_t(Cmd::REGISTER_ATTACKER)) {
-			std::string hId;
-			p >> hId;
-			if (database.find(hId) == database.end())
-				database[hId] = HIdInfo();
-
-			//client is banned (access denied)
-			if (database[hId].isBanned) {
-				sf::Packet res;
-				res << reqId << bool(false);
-				auto _ = u.socket->send(res);
-
-				selector.remove(*u.socket);
-				delete u.socket;
-
-				outputLog("banned client (" + std::to_string(id) + "): " + hId);
-				idsToRemove.insert(id);
-			}
-			//access granted
-			else {
-				sf::Packet res;
-				res << reqId << bool(true) << uint16_t(id);
-				auto _ = u.socket->send(res);
-
-				u.isAttacker = true, u.hId = hId;
-				initializedIds.insert(id);
-				idsToRemove.insert(id);
-
-				clients[id] = u;
-
-				outputLog(std::to_string(id) + " = attacker: " + hId);
-				sendClientList();
-			}
-		}
-		//accept victim
-		else if (cmd == std::uint8_t(Cmd::REGISTER_VICTIM)) {
-			std::string hId;
-			p >> hId;
-			if (database.find(hId) == database.end())
-				database[hId] = HIdInfo();
-
-			sf::Packet res;
-			res << reqId << bool(true) << uint16_t(id);
-			auto _ = u.socket->send(res);
-
-			u.isAttacker = false, u.hId = hId;
-			initializedIds.insert(id);
-			idsToRemove.insert(id);
-
-			clients[id] = u;
-
-			outputLog(std::to_string(id) + " = victim: " + hId);
-			sendClientList();
-		}
-		//unknown first command
-		else {
-			outputLog("uninitialized client gone rogue (" + std::to_string(id) + ")");
-
-			selector.remove(*uninitialized[id].socket);
-			delete uninitialized[id].socket;
-
-			idsToRemove.insert(id);
-		}
-	}
-	for (const auto& id : idsToRemove)
-		uninitialized.erase(id);
-
 	//listen for client communication
 	std::set<std::string> bannedHIds;
 	std::set<uint16_t> idsToDisconnect;
 	for (auto& [id, c] : clients) {
-		//skip just initialized clients
-		if (initializedIds.find(id) != initializedIds.end())
-			continue;
 		if (!selector.isReady(*c.socket))
 			continue;
 
@@ -201,14 +68,141 @@ int Server::processIncoming()
 			idsToDisconnect.insert(id);
 			continue;
 		}
-		else if (status != sf::Socket::Status::Done)
+		else if (status != sf::Socket::Status::Done) {
+			outputLog("code " + std::to_string(int(status)));
 			continue;
+		}
 
 		auto cmd = processPacket(p, c, id, bannedHIds, idsToDisconnect);
 		if (cmd != 0)
 			outputLog("failed to process cmd " + std::to_string(cmd) + " from id " + std::to_string(id));
 	}
 
+	//listen for initialization attempts
+	std::set<std::uint16_t> initializedIds, idsToRemove;
+	for (auto& [id, u] : uninitialized) {
+		if (!selector.isReady(*u.socket))
+			continue;
+
+		sf::Packet p;
+		u.socket->setBlocking(false);
+		auto status = u.socket->receive(p);
+		u.socket->setBlocking(true);
+
+		//forget disconnected client
+		if (status == sf::Socket::Status::Disconnected) {
+			outputLog("uninitialized client disconnected (" + std::to_string(id) + ")");
+			idsToRemove.insert(id);
+		}
+		if (status != sf::Socket::Status::Done)
+			continue;
+
+		std::uint16_t reqId;
+		std::uint8_t cmd;
+		std::string ver, hId;
+		p >> reqId >> cmd >> ver >> hId;
+
+		bool isRouge = false;
+		if (ver.size() < 3)
+			isRouge = true;
+		else if (ver[0] != '#' || ver.back() != '#')
+			isRouge = true;
+		if (isRouge) {
+			outputLog("uninitialized client gone rogue (" + std::to_string(id) + ")");
+			idsToRemove.insert(id);
+			continue;
+		}
+
+		//TODO: handle client version
+
+		//accept admin
+		if (cmd == std::uint8_t(Cmd::REGISTER_ADMIN)) {
+			std::string pw;
+			p >> pw;
+			if (database.find(hId) == database.end())
+				database[hId] = HIdInfo();
+
+			//password is correct
+			if (pw == adminPass) {
+				sf::Packet res;
+				res << reqId << bool(true) << uint16_t(id);
+				auto _ = u.socket->send(res);
+
+				u.isAttacker = true, u.isAdmin = true, u.hId = hId;
+
+				outputLog(std::to_string(id) + " = admin: " + hId);
+				initializedIds.insert(id);
+			}
+			//password is not correct
+			else {
+				sf::Packet res;
+				res << reqId << bool(false);
+				auto _ = u.socket->send(res);
+
+				outputLog("failed admin login (" + std::to_string(id) + ")");
+				idsToRemove.insert(id);
+			}
+		}
+		//accept attacker
+		else if (cmd == std::uint8_t(Cmd::REGISTER_ATTACKER)) {
+			if (database.find(hId) == database.end())
+				database[hId] = HIdInfo();
+
+			//client is banned (access denied)
+			if (database[hId].isBanned) {
+				sf::Packet res;
+				res << reqId << bool(false);
+				auto _ = u.socket->send(res);
+
+				outputLog("banned client (" + std::to_string(id) + "): " + hId);
+				idsToRemove.insert(id);
+			}
+			//access granted
+			else {
+				sf::Packet res;
+				res << reqId << bool(true) << uint16_t(id);
+				auto _ = u.socket->send(res);
+
+				u.isAttacker = true, u.hId = hId;
+
+				outputLog(std::to_string(id) + " = attacker: " + hId);
+				initializedIds.insert(id);
+			}
+		}
+		//accept victim
+		else if (cmd == std::uint8_t(Cmd::REGISTER_VICTIM)) {
+			if (database.find(hId) == database.end())
+				database[hId] = HIdInfo();
+
+			sf::Packet res;
+			res << reqId << bool(true) << uint16_t(id);
+			auto _ = u.socket->send(res);
+
+			u.isAttacker = false, u.hId = hId;
+
+			outputLog(std::to_string(id) + " = victim: " + hId);
+			initializedIds.insert(id);
+		}
+		//unknown first command
+		else {
+			outputLog("uninitialized client gone rogue (" + std::to_string(id) + ")");
+			idsToRemove.insert(id);
+		}
+	}
+
+	//disconnect uninitialized clients
+	for (const auto& id : idsToRemove) {
+		selector.remove(*uninitialized[id].socket);
+		delete uninitialized[id].socket;
+
+		uninitialized.erase(id);
+	}
+	//initilize initialized clients
+	for (const auto& id : initializedIds) {
+		clients[id] = std::move(uninitialized[id]);
+
+		uninitialized.erase(id);
+	}
 	//add banned clients to the kill list
 	for (const auto& hId : bannedHIds) {
 		for (auto& [id, c] : clients) {
@@ -222,7 +216,7 @@ int Server::processIncoming()
 	//kill all the clients that need to
 	for (const auto& id : idsToDisconnect)
 		disconnectClient(id);
-	if (idsToDisconnect.size() > 0)
+	if (idsToDisconnect.size() > 0 || initializedIds.size() > 0)
 		sendClientList();
 
 	return 0;
@@ -418,6 +412,9 @@ void Server::disconnectClient(uint16_t id)
 
 int Server::loadDatabase()
 {
+	std::fstream create(databasePath, std::ios::app);
+	create.close();
+
 	int num = 0;
 	std::ifstream file(databasePath);
 

@@ -181,7 +181,7 @@ bool Victim::connectServer()
 	//send the registration request
 	sf::Packet req;
 	uint16_t reqId = requestId++;
-	req << reqId << std::uint8_t(Cmd::REGISTER_VICTIM) << myHId;
+	req << reqId << std::uint8_t(Cmd::REGISTER_VICTIM) << std::string("#v0.0.1#") << myHId;
 	if (server.send(req) != sf::Socket::Status::Done) {
 		server.disconnect();
 		return false;

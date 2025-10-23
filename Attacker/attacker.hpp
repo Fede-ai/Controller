@@ -46,4 +46,5 @@ private:
 	bool isSendingKeyboard = false;
 
 	static Attacker* attacker;
+	sf::Clock mouseTimer;
 };
