@@ -22,6 +22,8 @@ Attacker::Attacker(std::string inHId, ftxui::Tui& inTui)
 	tui.setTitle(" " + myHId + " - " + priv + " / " + publ);
 
 	mouseTimer.start();
+	pingTimer.start();
+
 	std::thread([] {
 		auto m = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, NULL, 0);
 		auto k = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, NULL, 0);
@@ -38,6 +40,16 @@ Attacker::Attacker(std::string inHId, ftxui::Tui& inTui)
 int Attacker::update()
 {
 	sf::Clock clock;
+
+	if (pingTimer.getElapsedTime() > sf::seconds(3)) {
+		pingTimer.restart();
+
+		if (isInitialized) {
+			sf::Packet p;
+			p << uint16_t(0) << uint8_t(Cmd::PING);
+			auto _ = server.send(p);
+		}
+	}
 
 	while (tui.server_commands.size() > 0) {
 		std::string line = tui.server_commands.front();

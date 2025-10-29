@@ -25,15 +25,50 @@ Server::Server()
 		outputLog(e.what());
 		std::exit(-2);
 	}
+	
+	lastAwakeCheckTime = std::chrono::duration_cast<std::chrono::seconds>(
+		std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
 int Server::processIncoming()
 {
-	if (!selector.wait()) {
+	size_t now = std::chrono::duration_cast<std::chrono::seconds>(
+		std::chrono::system_clock::now().time_since_epoch()).count();
+	if (now - lastAwakeCheckTime > 10) {
+		std::set<uint16_t> idsSleeping;
+		for (auto& [id, c] : clients) {
+			if (!c.isAwake)
+				idsSleeping.insert(id);
+			else
+				c.isAwake = false;
+		}
+		for (auto id : idsSleeping) {
+			outputLog("client timed out (" + std::to_string(id) + ")");
+			disconnectClient(id);
+		}		
+		
+		idsSleeping.clear();
+		for (auto& [id, u] : uninitialized) {
+			if (!u.isAwake)
+				idsSleeping.insert(id);
+			else
+				u.isAwake = false;
+		}
+		for (auto id : idsSleeping) {
+			selector.remove(*uninitialized[id].socket);
+			delete uninitialized[id].socket;
+
+			uninitialized.erase(id);
+		}
+
+		lastAwakeCheckTime = now;
+	}
+
+	if (!selector.wait(sf::seconds(1))) {
 		sf::sleep(sf::milliseconds(1));
 		return 0;
 	}
-
+	
 	//listen for incoming connections
 	if (selector.isReady(listener)) {
 		Client c;
@@ -76,10 +111,12 @@ int Server::processIncoming()
 		auto cmd = processPacket(p, c, id, bannedHIds, idsToDisconnect);
 		if (cmd != 0)
 			outputLog("failed to process cmd " + std::to_string(cmd) + " from id " + std::to_string(id));
+		else
+			c.isAwake = true;
 	}
 
 	//listen for initialization attempts
-	std::set<std::uint16_t> initializedIds, idsToRemove;
+	std::set<uint16_t> initializedIds, idsToRemove;
 	for (auto& [id, u] : uninitialized) {
 		if (!selector.isReady(*u.socket))
 			continue;
@@ -102,6 +139,7 @@ int Server::processIncoming()
 		std::string ver, hId;
 		p >> reqId >> cmd >> ver >> hId;
 
+		u.isAwake = true;
 		bool isRouge = false;
 		if (ver.size() < 3)
 			isRouge = true;
@@ -229,8 +267,10 @@ uint8_t Server::processPacket(sf::Packet& p, Client& c, const uint16_t& id,
 	uint8_t cmd;
 	p >> reqId >> cmd;
 
+	if (cmd == uint8_t(Cmd::PING)) 
+		return 0;
 	//stop ssh
-	if (cmd == uint8_t(Cmd::END_SSH)) {
+	else if (cmd == uint8_t(Cmd::END_SSH)) {
 		//not paired or invalid pairing
 		if (c.sshId == 0 || clients.find(c.sshId) == clients.end())
 			return cmd;

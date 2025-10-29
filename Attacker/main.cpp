@@ -140,5 +140,5 @@ int main() {
     tui.stop();
 	tui_thread.join();
 
-	return (status > 0) ? 0 : status;
+	return status;
 }

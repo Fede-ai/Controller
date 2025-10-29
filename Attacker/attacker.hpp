@@ -47,4 +47,5 @@ private:
 
 	static Attacker* attacker;
 	sf::Clock mouseTimer;
+	sf::Clock pingTimer;
 };

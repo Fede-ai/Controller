@@ -10,6 +10,7 @@ struct Client {
 	bool isAttacker = false, isAdmin = false;
 	uint16_t sshId = 0;
 	std::string hId = "";
+	bool isAwake = true;
 };
 
 struct HIdInfo {
@@ -32,7 +33,7 @@ private:
 		logFile << t << " - " << s << "\n";
 		logFile.close();
 	}
-
+	
 	uint8_t processPacket(sf::Packet& p, Client& c, const uint16_t& id,
 		std::set<std::string>& bannedHIds, std::set<uint16_t>& idsToDisconnect);
 
@@ -50,6 +51,8 @@ private:
 	const std::string logPath = "./log.log";
 	uint16_t nextId = 1;
 
+	//in seconds
+	size_t lastAwakeCheckTime = 0;
 	std::map<uint16_t, Client> clients;
 	std::map<uint16_t, Client> uninitialized;
 };
