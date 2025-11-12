@@ -34,11 +34,19 @@ private:
 		logFile.close();
 	}
 	
-	uint8_t processPacket(sf::Packet& p, Client& c, const uint16_t& id,
+	bool performAwakeCheck();
+	void acceptIncoming();
+	void handleCommunication(const uint16_t& id, Client& c,
+		std::set<std::string>& bannedHIds, std::set<uint16_t>& idsToDisconnect);
+	//0 = incomplete packet, 1 = client initialized, 2 = client NOT initialized
+	short initializeClient(const uint16_t& id, Client& u);
+
+	uint8_t handlePacket(sf::Packet& p, const uint16_t& id, Client& c,
 		std::set<std::string>& bannedHIds, std::set<uint16_t>& idsToDisconnect);
 
 	void sendClientList() const;
 	void disconnectClient(uint16_t id);
+
 	int loadDatabase();
 	void saveDatabase() const;
 

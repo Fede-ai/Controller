@@ -7,17 +7,20 @@
 - help
 - exit
 - clear
-- togglemouse
-- togglekeyboard
 
-- connect [ip] [port]
 - connect [ip]
-- adminconnect [ip] [port]
+- connect [ip] [port]
 - adminconnect [ip]
+- adminconnect [ip] [port]
 - name [hardware id] [name]
 - ban [hardware id]
 - unban [hardware id]
 - save
 - kill [client id]
 - ssh [client id]
+
+- togglemouse
+- togglekeyboard
+- sendfile [source path] [dest path]
+- getfile [source path] [dest path]
 ```

