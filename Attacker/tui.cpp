@@ -8,7 +8,7 @@ ftxui::Tui::Tui()
     //setup title
     title = Renderer([] {
         return hbox({
-            text(" Waiting for startup...") | bold | color(Color::Blue),
+            text(" Waiting for startup...") | color(Color::Blue),
             }) | border;
         });
 
@@ -79,11 +79,12 @@ ftxui::Tui::Tui()
         }, &info_tab_selected);
 
     //setup tab for shell panels
-    shell_tab_values = { "Server", "SSH" };
+    shell_tab_values = { "Server", "SSH", "Blank"};
     shell_tab_menu = Menu(&shell_tab_values, &shell_tab_selected);
     shell_tab_container = Container::Tab({
             server_shell,
             ssh_shell,
+			Renderer([] { return filler(); })
         }, &shell_tab_selected);
 
     mouse_checkbox = Checkbox("", &is_sending_mouse);
@@ -102,14 +103,18 @@ ftxui::Tui::Tui()
         });
 
     //main layout renderer
-    ssh_title = text("SSH (0)") | color(Color::Red);
     info_title = text("Not connected") | color(Color::Red);
+    ssh_title = text("SSH (0)") | color(Color::Red);
+
+	sending_file_status = text(" Sending: Idle ") | color(Color::GrayDark);
+	getting_file_status = text(" Getting: Idle ") | color(Color::GrayDark);
+
     main_renderer = Renderer(layout, [&] {
         return vbox({
-            title->Render(),
+            title->Render() | bold,
             vbox({
                 hbox({
-                    info_title | bold | xflex,
+                    info_title | xflex | bold,
                     separator(),
                     info_tab_menu->Render(),
                 }) | xflex | align_right,
@@ -117,7 +122,7 @@ ftxui::Tui::Tui()
             }) | border,
             hbox({
                 vbox({
-                    ssh_title | bold | center,
+                    ssh_title | center | bold,
                     separator(),
                     //non interactive checkbox
                     hbox({
@@ -131,6 +136,9 @@ ftxui::Tui::Tui()
                         }),
                     }),
                     separator(),
+					sending_file_status | center,
+					getting_file_status | center,
+					separator(),
                     shell_tab_menu->Render()
                 }),
                 separator(),
@@ -138,6 +146,8 @@ ftxui::Tui::Tui()
             }) | flex | border,
             });
         });
+
+	server_shell->TakeFocus();
 }
 
 void ftxui::Tui::run()
@@ -230,7 +240,7 @@ void ftxui::Tui::setTitle(std::string s)
         mutex.lock();
         title = Renderer([&] {
             return hbox({
-                text(title_string) | bold | color(Color::Blue),
+                text(title_string) | color(Color::Blue),
                 }) | border;
             });
         mutex.unlock();
@@ -289,6 +299,48 @@ void ftxui::Tui::setIsSendingKeyboard(bool b)
     screen.Post([&] {
         mutex.lock();
         is_sending_keyboard = new_is_sending_keyboard;
+        mutex.unlock();
+
+        triggerRedraw();
+        });
+}
+void ftxui::Tui::setSendingFileProgress(short p)
+{
+    mutex.lock();
+    if (p == -1)
+        new_sending_file_status = text(" Sending: Error ") | color(Color::Red);
+    else if (p >= 0 && p < 100)
+        new_sending_file_status = text(" Sending: " + std::to_string(p) + "% ") | color(Color::Orange1);
+    else if (p == 100)
+        new_sending_file_status = text(" Sending: 100% ") | color(Color::Green);
+    else if (p == 101)
+		new_sending_file_status = text(" Sending: Idle ") | color(Color::GrayDark);
+    mutex.unlock();
+
+    screen.Post([&] {
+        mutex.lock();
+        sending_file_status = new_sending_file_status;
+        mutex.unlock();
+
+        triggerRedraw();
+        });
+}
+void ftxui::Tui::setGettingFileProgress(short p)
+{
+    mutex.lock();
+    if (p == -1)
+        new_getting_file_status = text(" Getting: Error ") | color(Color::Red);
+    else if (p >= 0 && p < 100)
+        new_getting_file_status = text(" Getting: " + std::to_string(p) + "% ") | color(Color::Orange1);
+    else if (p == 100)
+        new_getting_file_status = text(" Getting: 100% ") | color(Color::Green);
+    else if (p == 101)
+        new_getting_file_status = text(" Getting: Idle ") | color(Color::GrayDark);
+    mutex.unlock();
+
+    screen.Post([&] {
+        mutex.lock();
+        getting_file_status = new_getting_file_status;
         mutex.unlock();
 
         triggerRedraw();

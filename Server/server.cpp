@@ -52,6 +52,10 @@ int Server::processIncoming()
 	//wait for the selector to be ready
 	if (!selector.wait(sf::seconds(1))) {
 		sf::sleep(sf::milliseconds(1));
+
+		if (needSendClientList)
+			sendClientList();
+
 		return 0;
 	}
 
@@ -348,7 +352,7 @@ uint8_t Server::handlePacket(sf::Packet& p, const uint16_t& id, Client& c,
 		return 0;
 	}
 	//send ssh data
-	else if (cmd >= uint8_t(Cmd::SSH_DATA) && cmd < uint8_t(Cmd::SSH_DATA + 30)) {
+	else if (cmd >= uint8_t(Cmd::SSH_DATA) && cmd < uint8_t(Cmd::SSH_DATA + 50)) {
 		if (c.sshId == 0 || clients.find(c.sshId) == clients.end()) {
 			sf::Packet res;
 			res << uint16_t(0) << uint8_t(Cmd::END_SSH);

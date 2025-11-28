@@ -18,9 +18,13 @@
 - save
 - kill [client id]
 - ssh [client id]
+- exitssh
 
 - togglemouse
 - togglekeyboard
 - sendfile [source path] [dest path]
+- stopsend
 - getfile [source path] [dest path]
+- stopget
+
 ```

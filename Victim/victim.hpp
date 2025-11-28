@@ -18,4 +18,8 @@ private:
 	const short serverPort = 443;
 
 	bool isSshActive = false;
+
+	std::string destFilePath = "";
+	std::string destFileExt = "";
+	uint32_t filePacketsMissing = 0;
 };

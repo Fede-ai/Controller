@@ -14,6 +14,10 @@ namespace ftxui {
 		void setInfoTitle(Element e);
 		void setIsSendingMouse(bool b);
 		void setIsSendingKeyboard(bool b);
+		// -1 = error, 0-99 = progress, 100 = done, 101 = idle
+		void setSendingFileProgress(short p);
+		// -1 = error, 0-99 = progress, 100 = done, 101 = idle
+		void setGettingFileProgress(short p);
 		
 		void setClientsOutput(std::string s);
 		void setDatabaseOutput(std::string s);
@@ -36,6 +40,7 @@ namespace ftxui {
 		std::string new_clients_output, new_database_output;
 		std::queue<std::string> new_server_shell_output, new_ssh_shell_output;
 		bool new_is_sending_mouse = false, new_is_sending_keyboard = false;
+		Element new_sending_file_status, new_getting_file_status;
 		
 		Element info_title, ssh_title;
 		std::string clients_output, database_output;
@@ -55,6 +60,7 @@ namespace ftxui {
 
 		bool is_sending_mouse = false, is_sending_keyboard = false;
 		Component mouse_checkbox, keyboard_checkbox;
+		Element sending_file_status, getting_file_status;
 		
 		ScreenInteractive screen;
 		Component layout, main_renderer, title;

