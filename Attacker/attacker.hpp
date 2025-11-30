@@ -20,7 +20,7 @@ private:
 	void updateList(sf::Packet& p);
 
 	void sendFile(std::string path, uint32_t numPackets);
-	void getFile() {};
+	void getFile(std::string path, std::string ext, uint32_t numPackets);
 
 	static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam);
 	static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);

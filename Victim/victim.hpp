@@ -8,6 +8,7 @@ public:
 
 private:
 	bool connectServer();
+	std::string processCommand(const std::string& cmd) const;
 
 	sf::TcpSocket server;
 	std::string myHId = "";
@@ -19,7 +20,11 @@ private:
 
 	bool isSshActive = false;
 
+	static constexpr size_t packetSize = 256 * 256;
 	std::string destFilePath = "";
 	std::string destFileExt = "";
-	uint32_t filePacketsMissing = 0;
+	uint32_t sendFilePacketsMissing = 0;
+
+	std::string sourceFilePath = "";
+	uint32_t getFilePacketsSent = 0;
 };

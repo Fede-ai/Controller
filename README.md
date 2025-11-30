@@ -2,9 +2,9 @@
 
 ### 🚧 WORK IN PROGRESS 🚧
 
-### Attacker CMDs
+### Attacker commands
 ```
-- help
+- help (not implemented)
 - exit
 - clear
 
@@ -26,5 +26,12 @@
 - stopsend
 - getfile [source path] [dest path]
 - stopget
+
+```
+
+### SSH commands
+```
+- cd [path]
+- ls
 
 ```
