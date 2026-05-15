@@ -388,47 +388,6 @@ bool Attacker::handleCmd(const std::string& s)
 		if (server.send(req) != sf::Socket::Status::Done)
 			tui.printServerShell("failed to send request to server\n");
 	}
-	//with server confirm
-	else if (cmd == "save") {
-		if (param.size() != 0) {
-			tui.printServerShell("incorrect number of arguments entered\n");
-			return true;
-		}
-		if (!isInitialized) {
-			tui.printServerShell("client is not initialized\n");
-			return true;
-		}
-		if (!isAdmin) {
-			tui.printServerShell("admin privileges are needed\n");
-			return true;
-		}
-
-		sf::Packet req;
-		uint16_t reqId = requestId++;
-		req << uint16_t(reqId) << uint8_t(Cmd::SAVE_DATASET);
-		if (server.send(req) != sf::Socket::Status::Done) {
-			tui.printServerShell("failed to send request to server\n");
-			return true;
-		}
-
-		tui.printServerShell("waiting for response: [");
-		for (int i = 0; i < 10; i++) {
-			if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
-				tui.printServerShell("*");
-				sf::sleep(sf::milliseconds(500));
-			}
-			else
-				tui.printServerShell(".");
-		}
-		tui.printServerShell("] - ");
-
-		if (responsesToProcess.find(reqId) == responsesToProcess.end())
-			tui.printServerShell("request timed out\n");
-		else {
-			responsesToProcess.erase(reqId);
-			tui.printServerShell("saved database\n");
-		}
-	}
 	else if (cmd == "kill") {
 		if (param.size() != 1) {
 			tui.printServerShell("incorrect number of arguments entered\n");

