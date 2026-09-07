@@ -15,9 +15,6 @@ Server::Server()
 	printLog("");
 	printLog("loaded " + std::to_string(state) + " hId datapoint(s) from file");
 
-	//const char* sql = "DELETE FROM clients WHERE hId = '80EA4B83C6681BA24B78E81180C99828A616C18E';";
-	//sqlite3_exec(db, sql, nullptr, nullptr, nullptr);
-
 	if (listener.listen(443) != sf::Socket::Status::Done) {
 		printLog("failed to listen on port 443");
 		std::exit(-1);

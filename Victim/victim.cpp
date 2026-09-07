@@ -412,5 +412,5 @@ std::string Victim::processCommand(const std::string& cmd) const
 		return output;
 	}
 
-	return "unable to process command\n";
+	return "command not recognized\n";
 }

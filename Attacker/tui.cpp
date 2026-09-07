@@ -1,5 +1,8 @@
 #include "tui.hpp"
-#include "scroller.hpp"
+
+ftxui::Component ftxui::Scroller(Component child) {
+    return Make<ftxui::ScrollerBase>(std::move(child));
+}
 
 ftxui::Tui::Tui()
 	:
@@ -426,9 +429,4 @@ void ftxui::Tui::clearSshShell()
         ssh_shell_output.clear();
         triggerRedraw();
         });
-}
-
-void ftxui::Tui::triggerRedraw()
-{
-	screen.PostEvent(Event::Custom);
 }

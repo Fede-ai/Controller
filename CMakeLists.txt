@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 project(Controller LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -19,7 +20,22 @@ endif()
 
 find_package(SFML 3 COMPONENTS System Window Graphics Network Main QUIET)
 if (NOT SFML_FOUND)
-    message(FATAL_ERROR "SFML library not found. Please set SFML_ROOT_HINT to the correct path.")
+    message(STATUS "SFML not found, fetching from GitHub...")
+    set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+    set(SFML_BUILD_EXAMPLES OFF CACHE INTERNAL "")
+    set(SFML_BUILD_TEST_SUITE OFF CACHE INTERNAL "")
+    set(SFML_BUILD_DOC OFF CACHE INTERNAL "")
+
+    FetchContent_Declare(
+        SFML
+        GIT_REPOSITORY https://github.com/SFML/SFML.git
+        GIT_TAG 3.0.0
+        GIT_SHALLOW ON
+        EXCLUDE_FROM_ALL
+        SYSTEM
+    )
+    FetchContent_MakeAvailable(SFML)
+
 else()
     message(STATUS "Found SFML: ${SFML_VERSION} at ${SFML_DIR}")
 endif()
@@ -47,7 +63,7 @@ if(NOT SQLite3_FOUND)
         FOLDER "external"
     )
     
-    add_library(SQLite3::SQLite3 ALIAS sqlite3)
+    add_library(SQLite::SQLite3 ALIAS sqlite3)
 endif()
 
 #LOGIC TO INCLUDE FTXUI

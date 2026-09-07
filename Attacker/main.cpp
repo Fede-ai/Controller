@@ -126,7 +126,7 @@ int main() {
 		has_tui_stopped.store(true);
         });
 
-    sf::sleep(sf::seconds(0.1));
+    sf::sleep(sf::seconds(0.1f));
     
     Attacker attacker(hId, tui);
     int status = 0;
