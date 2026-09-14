@@ -13,14 +13,15 @@ public:
 private:
 	void receiveTcp();
 
-	void connectServer(bool pw, std::string ipStr, short port);
-
 	bool handleCmd(const std::string& s);
 	void handlePacket(sf::Packet& p);
+
+	void connectServer(bool pw, std::string ipStr, short port);
 	void updateList(sf::Packet& p);
 
 	void sendFile(std::string path, uint32_t numPackets);
 	void getFile(std::string path, std::string ext, uint32_t numPackets);
+	void handleVideo();
 
 	static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam);
 	static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);
@@ -47,6 +48,9 @@ private:
 	bool isSshActive = false;
 	bool isSendingMouse = false;
 	bool isSendingKeyboard = false;
+
+	bool isGettingVideo = false;
+	std::thread* getVideoThread = nullptr;
 
 	static constexpr size_t packetSize = 256 * 256;
 	std::thread* sendFileThread = nullptr;

@@ -3,6 +3,8 @@ set(SOURCE
 	victim.hpp
 	victim.cpp
 	../commands.hpp
+	stb_image_write.h
+	stb_image_resize2.h
 )
 
 #add_executable(Victim WIN32 ${SOURCE})
@@ -12,7 +14,9 @@ set_target_properties(Victim PROPERTIES
   WIN32_EXECUTABLE $<CONFIG:Release>
 )
 
-target_link_libraries(Victim PRIVATE SFML::System SFML::Network SFML::Window SFML::Main)
+target_link_libraries(Victim PRIVATE 
+	SFML::System SFML::Network SFML::Window SFML::Main
+)
 
 if(WIN32)
   add_custom_command(TARGET Victim POST_BUILD

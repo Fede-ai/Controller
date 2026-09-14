@@ -12,12 +12,12 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set_directory_properties(PROPERTIES VS_SOLUTION_ITEMS "CMakeLists.txt;LICENSE.md;README.md;.gitignore")
 source_group("solution items" FILES CMakeLists.txt LICENSE.md README.md .gitignore)
 
-#LOGIC TO INCLUDE SFML
-set(SFML_ROOT_HINT "" CACHE PATH "Path to SFML installation")
+set(SFML_ROOT_HINT "C:/SFML-3.0.0" CACHE PATH "Path to SFML installation")
 if(SFML_ROOT_HINT)
     list(APPEND CMAKE_PREFIX_PATH "${SFML_ROOT_HINT}")
 endif()
 
+#LOGIC TO INCLUDE SFML
 find_package(SFML 3 COMPONENTS System Window Graphics Network Main QUIET)
 if (NOT SFML_FOUND)
     message(STATUS "SFML not found, fetching from GitHub...")
@@ -29,13 +29,13 @@ if (NOT SFML_FOUND)
     FetchContent_Declare(
         SFML
         GIT_REPOSITORY https://github.com/SFML/SFML.git
+	    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         GIT_TAG 3.0.0
         GIT_SHALLOW ON
         EXCLUDE_FROM_ALL
         SYSTEM
     )
     FetchContent_MakeAvailable(SFML)
-
 else()
     message(STATUS "Found SFML: ${SFML_VERSION} at ${SFML_DIR}")
 endif()
@@ -46,6 +46,7 @@ if(NOT SQLite3_FOUND)
     FetchContent_Declare(
         sqlite3_source
         URL https://www.sqlite.org/2026/sqlite-amalgamation-3530100.zip
+	    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
     FetchContent_MakeAvailable(sqlite3_source)
     
@@ -67,11 +68,12 @@ if(NOT SQLite3_FOUND)
 endif()
 
 #LOGIC TO INCLUDE FTXUI
-set(BUILD_SERVER_ONLY True CACHE BOOL "Whether to only build the Server component (without Attacker and Victim)")
+set(BUILD_SERVER_ONLY False CACHE BOOL "Whether to only build the Server component (without Attacker and Victim)")
 if (NOT BUILD_SERVER_ONLY)
     FetchContent_Declare(
         ftxui
         GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI.git
+	    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         GIT_TAG v6.1.9
     )
     FetchContent_MakeAvailable(ftxui)

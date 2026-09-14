@@ -1,5 +1,7 @@
 #pragma once
 
+#define PROGRAM_VERSION "0.1.0"
+
 //uint8_t
 enum Cmd {
 	UNDEFINED = 0,
@@ -33,4 +35,7 @@ enum Cmd {
 
 	SSH_START_GETTING_FILE = 140,
 	SSH_GET_FILE_DATA = 141,
+
+	SSH_REQUEST_SCREENSHOT = 145,
+	SSH_SCREENSHOT_DATA = 146
 };
