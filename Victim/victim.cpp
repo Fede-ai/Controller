@@ -16,6 +16,7 @@ Victim::Victim(std::string inHId)
 	:
 	myHId(inHId)
 {
+	SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 }
 
 int Victim::runProcess()

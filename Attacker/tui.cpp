@@ -269,7 +269,7 @@ void ftxui::Tui::setIsSendingKeyboard(bool b)
 void ftxui::Tui::setIsGettingVideo(bool b)
 {
     screen.Post([this, b] {
-        is_sending_keyboard = b;
+        is_getting_video = b;
         triggerRedraw();
         });
 }
